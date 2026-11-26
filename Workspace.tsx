@@ -330,7 +330,7 @@ export default function Workspace({
       }
       choose(sample);
       setRequest(t("Could you also design a separate pricing page?"));
-      setMode(gpu ? "ai" : "manual");
+      setMode(gpu === false ? "manual" : "ai");
       setNotice(
         "Sample loaded. Run local analysis to generate the first finding.",
       );
