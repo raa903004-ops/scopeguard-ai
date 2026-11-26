@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -43,6 +44,9 @@ import {
   ContractText,
   exportCsv,
   extraWork,
+  formattedTotals,
+  reviewCurrency,
+  TaskEstimates,
   FindingsReport,
   RevenueTrend,
   RevenueByProject,
@@ -54,6 +58,12 @@ import {
   workspaceViews,
   type WorkspaceView,
 } from "./workspace-nav";
+import {
+  currencies,
+  extractHourlyRate,
+  type Currency,
+  type TaskEstimate,
+} from "./estimates";
 import "./workspace.css";
 
 type Project = {
@@ -65,7 +75,7 @@ type Project = {
 interface Store extends DBSchema {
   projects: { key: string; value: Project };
   reviews: { key: string; value: Review };
-  settings: { key: string; value: number };
+  settings: { key: string; value: number | Currency };
 }
 const database = () =>
   openDB<Store>("scopeguard-workspace", 1, {
@@ -125,10 +135,10 @@ export default function Workspace({
   const number = new Intl.NumberFormat(locale[language], {
     maximumFractionDigits: 6,
   });
-  const money = (value: number) =>
+  const money = (value: number, currency: Currency = "USD") =>
     new Intl.NumberFormat(locale[language], {
       style: "currency",
-      currency: "USD",
+      currency,
     }).format(value);
   function email(review: Review) {
     const subject = interpolate(t("Subject: Scope review — {project}"), {
@@ -147,8 +157,11 @@ export default function Workspace({
             ),
             {
               hours: number.format(review.hours),
-              rate: money(review.rate),
-              total: money(revenue(review.hours, review.rate)),
+              rate: money(review.rate, reviewCurrency(review)),
+              total: money(
+                revenue(review.hours, review.rate),
+                reviewCurrency(review),
+              ),
             },
           )
         : t(
@@ -173,6 +186,16 @@ export default function Workspace({
   const project = projects.find((p) => p.id === selected);
   const [ready, setReady] = useState(false);
   const [rate, setRate] = useState("100");
+  const [currency, setCurrency] = useState<Currency>("USD");
+  const [chartCurrency, setChartCurrency] = useState<Currency>("USD");
+  const defaultTerms = useRef<{ rate: string; currency: Currency }>({
+    rate: "100",
+    currency: "USD",
+  });
+  const rateSuggestion = useMemo(
+    () => extractHourlyRate(project?.contract ?? ""),
+    [project?.contract],
+  );
   const [gpu, setGpu] = useState<boolean | null>(null);
   const [name, setName] = useState("");
   const [contract, setContract] = useState("");
@@ -198,6 +221,7 @@ export default function Workspace({
   const [editFinding, setEditFinding] = useState<{
     result: Result;
     rate: string;
+    currency: Currency;
   }>();
   const [projectQuery, setProjectQuery] = useState("");
   const [projectStatus, setProjectStatus] = useState<Result["status"] | "">("");
@@ -232,16 +256,26 @@ export default function Workspace({
     const init = async () => {
       const db = await database();
       try {
-        const [ps, rs, defaultRate] = await Promise.all([
+        const [ps, rs, defaultRate, defaultCurrency] = await Promise.all([
           db.getAll("projects"),
           db.getAll("reviews"),
           db.get("settings", "rate"),
+          db.get("settings", "currency"),
         ]);
         if (active) {
           setProjects(ps);
           select(ps[0]?.id || "");
           setReviews(rs.sort((a, b) => b.created.localeCompare(a.created)));
-          setRate(String(defaultRate ?? 100));
+          defaultTerms.current = {
+            rate: String(defaultRate ?? 100),
+            currency:
+              typeof defaultCurrency === "string" ? defaultCurrency : "USD",
+          };
+          setRate(defaultTerms.current.rate);
+          if (typeof defaultCurrency === "string") {
+            setCurrency(defaultCurrency);
+            setChartCurrency(defaultCurrency);
+          }
           setReady(true);
         }
       } finally {
@@ -300,6 +334,8 @@ export default function Workspace({
   }
   function choose(p: Project) {
     select(p.id);
+    setRate(defaultTerms.current.rate);
+    setCurrency(defaultTerms.current.currency);
     setEditFinding(undefined);
     setQuestion("");
     setBatchFailed(undefined);
@@ -435,6 +471,7 @@ export default function Workspace({
               contract: project.contract,
               request: item,
               rate: Number(rate),
+              currency,
               created: new Date().toISOString(),
               source: mode === "manual" ? "Manual" : "Local AI",
               reasoningLanguage: mode === "manual" ? undefined : language,
@@ -461,13 +498,15 @@ export default function Workspace({
     if (!editFinding || !detail) return;
     await perform("Saving review…", async () => {
       if (!validRate(editFinding.rate))
-        throw new MessageError("Enter a valid USD hourly rate.");
+        throw new MessageError("Enter a valid hourly rate.");
       const output = validate(editFinding.result, detail.contract);
       await storeReview(
         {
           ...detail,
           ...output,
           rate: Number(editFinding.rate),
+          currency: editFinding.currency,
+          tasks: output.tasks,
           edited: true,
           reasoningLanguage:
             output.reasoning === detail.reasoning
@@ -540,20 +579,116 @@ export default function Workspace({
             onChange={(e) => onChange({ ...value, reasoning: e.target.value })}
           />
         </label>
-        <label>
-          {t("Estimated hours")}
-          <input
-            type="number"
-            required
-            min="0"
-            max="100000"
-            step="any"
-            value={value.hours}
-            onChange={(e) =>
-              onChange({ ...value, hours: Number(e.target.value) })
-            }
-          />
-        </label>
+        {value.tasks?.length ? (
+          <div className="ws-task-estimates">
+            <h3>{t("Task estimates")}</h3>
+            {value.tasks.map((estimate, index) => {
+              const update = (changes: Partial<TaskEstimate>) =>
+                onChange({
+                  ...value,
+                  tasks: value.tasks?.map((row, i) =>
+                    i === index ? { ...row, ...changes } : row,
+                  ),
+                });
+              return (
+                <div key={index} className="ws-task-edit">
+                  <label>
+                    {t("Task")} {index + 1}
+                    <input
+                      required
+                      value={estimate.task}
+                      onChange={(e) => update({ task: e.target.value })}
+                    />
+                  </label>
+                  <div className="ws-task-range">
+                    <label>
+                      {t("Minimum hours")}
+                      <input
+                        type="number"
+                        required
+                        min="0"
+                        max="100000"
+                        step=".01"
+                        value={estimate.minHours}
+                        onChange={(e) =>
+                          update({ minHours: Number(e.target.value) })
+                        }
+                      />
+                    </label>
+                    <label>
+                      {t("Maximum hours")}
+                      <input
+                        type="number"
+                        required
+                        min="0"
+                        max="100000"
+                        step=".01"
+                        value={estimate.maxHours}
+                        onChange={(e) =>
+                          update({ maxHours: Number(e.target.value) })
+                        }
+                      />
+                    </label>
+                  </div>
+                  <label>
+                    {t("Assumptions")}
+                    <textarea
+                      rows={2}
+                      required
+                      value={estimate.assumptions}
+                      onChange={(e) => update({ assumptions: e.target.value })}
+                    />
+                  </label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      const rest = value.tasks?.filter((_, i) => index !== i);
+                      onChange({
+                        ...value,
+                        tasks: rest?.length ? rest : undefined,
+                      });
+                    }}
+                  >
+                    {t("Remove task")}
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <label>
+            {t("Estimated hours")}
+            <input
+              type="number"
+              required
+              min="0"
+              max="100000"
+              step="any"
+              value={value.hours}
+              onChange={(e) =>
+                onChange({ ...value, hours: Number(e.target.value) })
+              }
+            />
+          </label>
+        )}
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={(value.tasks?.length ?? 0) >= 12}
+          onClick={() => {
+            const hours = value.tasks ? 0 : Math.round(value.hours * 100) / 100;
+            onChange({
+              ...value,
+              tasks: [
+                ...(value.tasks ?? []),
+                { task: "", minHours: hours, maxHours: hours, assumptions: "" },
+              ],
+            });
+          }}
+        >
+          {t("Add task")}
+        </Button>
       </>
     );
   }
@@ -581,7 +716,7 @@ export default function Workspace({
   function rateField(value: string, onChange: (newRate: string) => void) {
     return (
       <label>
-        {t("Hourly rate (USD)")}
+        {t("Hourly rate")}
         <input
           type="number"
           required
@@ -591,6 +726,25 @@ export default function Workspace({
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />
+      </label>
+    );
+  }
+  function currencyField(
+    value: Currency,
+    onChange: (currency: Currency) => void,
+    label: Message = "Currency",
+  ) {
+    return (
+      <label>
+        {t(label)}
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value as Currency)}
+        >
+          {currencies.map((code) => (
+            <option key={code}>{code}</option>
+          ))}
+        </select>
       </label>
     );
   }
@@ -750,10 +904,7 @@ export default function Workspace({
             realReviews.filter((r) => r.status === "out_of_scope").length,
           ),
         ],
-        [
-          t("Estimated extra work"),
-          money(realReviews.reduce((sum, r) => sum + extraWork(r), 0)),
-        ],
+        [t("Estimated extra work"), formattedTotals(realReviews, money)],
       ].map(([label, value]) => (
         <div key={label}>
           <span>{label}</span>
@@ -761,6 +912,9 @@ export default function Workspace({
         </div>
       ))}
     </div>
+  );
+  const chartReviews = realReviews.filter(
+    (r) => reviewCurrency(r) === chartCurrency,
   );
   const feedback = activity ?? notice;
   const modelState =
@@ -912,29 +1066,25 @@ export default function Workspace({
                   e.preventDefault();
                   void perform("Saving rate…", async () => {
                     if (!validRate(rate))
-                      throw new MessageError("Enter a valid USD hourly rate.");
+                      throw new MessageError("Enter a valid hourly rate.");
                     const db = await database();
                     try {
-                      await db.put("settings", Number(rate), "rate");
+                      const tx = db.transaction("settings", "readwrite");
+                      await Promise.all([
+                        tx.store.put(Number(rate), "rate"),
+                        tx.store.put(currency, "currency"),
+                        tx.done,
+                      ]);
                     } finally {
                       db.close();
                     }
+                    defaultTerms.current = { rate, currency };
                     setNotice("Default rate saved.");
                   });
                 }}
               >
-                <label>
-                  {t("Hourly rate (USD)")}
-                  <input
-                    type="number"
-                    min="0"
-                    max="100000"
-                    step=".01"
-                    required
-                    value={rate}
-                    onChange={(e) => setRate(e.target.value)}
-                  />
-                </label>
+                {rateField(rate, setRate)}
+                {currencyField(currency, setCurrency)}
                 <Button disabled={disabled}>{t("Save rate")}</Button>
               </form>
               <p>
@@ -962,10 +1112,11 @@ export default function Workspace({
                         "reviews",
                         "settings",
                       ]);
-                      const [p, r, s] = await Promise.all([
+                      const [p, r, s, c] = await Promise.all([
                         tx.objectStore("projects").getAll(),
                         tx.objectStore("reviews").getAll(),
                         tx.objectStore("settings").get("rate"),
+                        tx.objectStore("settings").get("currency"),
                       ]);
                       const url = URL.createObjectURL(
                         new Blob(
@@ -976,6 +1127,7 @@ export default function Workspace({
                                 projects: p,
                                 reviews: r,
                                 rate: s ?? 100,
+                                currency: c ?? "USD",
                               },
                               null,
                               2,
@@ -1040,7 +1192,13 @@ export default function Workspace({
                           setContract("");
                           setName("");
                           setManual({ ...blankReview });
+                          defaultTerms.current = {
+                            rate: "100",
+                            currency: "USD",
+                          };
                           setRate("100");
+                          setCurrency("USD");
+                          setChartCurrency("USD");
                           setConfirmDelete(false);
                           setNotice("Workspace data deleted.");
                         })
@@ -1145,7 +1303,8 @@ export default function Workspace({
         {ready && page === "analytics" && (
           <>
             {statistics}
-            {!realReviews.some((r) => extraWork(r) > 0) && (
+            {currencyField(chartCurrency, setChartCurrency, "Chart currency")}
+            {!chartReviews.some((r) => extraWork(r) > 0) && (
               <div className="ws-actions ws-empty-actions">
                 <a className="sg-button sg-solid" href="#analysis">
                   {t("Start analysis")}
@@ -1161,10 +1320,10 @@ export default function Workspace({
                   )}
                 </p>
                 <RevenueTrend
-                  reviews={realReviews}
+                  reviews={chartReviews}
                   language={language}
                   t={t}
-                  money={money}
+                  money={(value) => money(value, chartCurrency)}
                 />
               </Panel>
               <Panel
@@ -1172,7 +1331,11 @@ export default function Workspace({
                 icon={<Layers />}
               >
                 <p>{t("Top five projects by estimated extra work.")}</p>
-                <RevenueByProject reviews={realReviews} t={t} money={money} />
+                <RevenueByProject
+                  reviews={chartReviews}
+                  t={t}
+                  money={(value) => money(value, chartCurrency)}
+                />
               </Panel>
             </div>
           </>
@@ -1260,7 +1423,32 @@ export default function Workspace({
                               {excerptField}
                             </>
                           )}
-                          {rateField(rate, setRate)}
+                          {rateSuggestion && (
+                            <div className="ws-rate-suggestion">
+                              <strong>
+                                {t("Contract rate suggestion")} ·{" "}
+                                {money(
+                                  rateSuggestion.rate,
+                                  rateSuggestion.currency,
+                                )}
+                              </strong>
+                              <blockquote>{rateSuggestion.evidence}</blockquote>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                  setRate(String(rateSuggestion.rate));
+                                  setCurrency(rateSuggestion.currency);
+                                }}
+                              >
+                                {t("Use contract rate")}
+                              </Button>
+                            </div>
+                          )}
+                          <div className="ws-task-range">
+                            {rateField(rate, setRate)}
+                            {currencyField(currency, setCurrency)}
+                          </div>
                           <div className="ws-actions">
                             <Button
                               disabled={
@@ -1316,18 +1504,25 @@ export default function Workspace({
                           <p lang={detail.reasoningLanguage}>
                             {detail.reasoning}
                           </p>
+                          {detail.tasks && (
+                            <TaskEstimates
+                              tasks={detail.tasks}
+                              t={t}
+                              language={language}
+                            />
+                          )}
                           <b>
                             {number.format(detail.hours)} {t("h")} ×{" "}
-                            {money(detail.rate)} / {t("h")} ={" "}
-                            {money(revenue(detail.hours, detail.rate))}
+                            {money(detail.rate, reviewCurrency(detail))} /{" "}
+                            {t("h")} ={" "}
+                            {money(
+                              revenue(detail.hours, detail.rate),
+                              reviewCurrency(detail),
+                            )}
                           </b>
                           <p>
                             {t("Estimated extra work")} ·{" "}
-                            {money(
-                              detail.status === "out_of_scope"
-                                ? revenue(detail.hours, detail.rate)
-                                : 0,
-                            )}
+                            {money(extraWork(detail), reviewCurrency(detail))}
                           </p>
 
                           {!editFinding && (
@@ -1338,6 +1533,7 @@ export default function Workspace({
                                 setEditFinding({
                                   result: detail,
                                   rate: String(detail.rate),
+                                  currency: reviewCurrency(detail),
                                 })
                               }
                             >
@@ -1357,6 +1553,12 @@ export default function Workspace({
                                   setEditFinding({
                                     ...editFinding,
                                     rate: value,
+                                  }),
+                                )}
+                                {currencyField(editFinding.currency, (value) =>
+                                  setEditFinding({
+                                    ...editFinding,
+                                    currency: value,
                                   }),
                                 )}
                                 <div className="ws-actions">
@@ -1547,12 +1749,7 @@ export default function Workspace({
                       {number.format(currentReviews.length)}
                       <br />
                       {t("Estimated extra work")} ·{" "}
-                      {money(
-                        currentReviews.reduce(
-                          (sum, r) => sum + extraWork(r),
-                          0,
-                        ),
-                      )}
+                      {formattedTotals(currentReviews, money)}
                     </p>
                     <div className="ws-actions">
                       <Button

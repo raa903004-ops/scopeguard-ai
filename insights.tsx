@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { currencies, hourRange, type Currency } from "./estimates";
 import { revenue, type Result } from "./engine";
 import { locale, type Language, type Translate } from "./i18n";
 
@@ -9,6 +10,7 @@ export type Review = Result & {
   contract: string;
   request: string;
   rate: number;
+  currency?: Currency;
   created: string;
   source: "Manual" | "Local AI";
   reasoningLanguage?: Language;
@@ -24,6 +26,68 @@ export const statuses = {
 
 export const extraWork = (review: Review) =>
   review.status === "out_of_scope" ? revenue(review.hours, review.rate) : 0;
+
+export const reviewCurrency = (review: Review) => review.currency ?? "USD";
+
+export function formattedTotals(
+  reviews: Review[],
+  money: (value: number, currency: Currency) => string,
+) {
+  const sums = currencies
+    .map((currency) => {
+      const cents = reviews.reduce(
+        (sum, review) =>
+          reviewCurrency(review) === currency
+            ? sum + Math.round(extraWork(review) * 100)
+            : sum,
+        0,
+      );
+      return { currency, total: cents / 100 };
+    })
+    .filter(({ total }) => total > 0);
+  return sums.length
+    ? sums.map(({ currency, total }) => money(total, currency)).join(" · ")
+    : money(0, reviews[0] ? reviewCurrency(reviews[0]) : "USD");
+}
+
+export function TaskEstimates({
+  tasks,
+  t,
+  language,
+}: {
+  tasks: NonNullable<Result["tasks"]>;
+  t: Translate;
+  language: Language;
+}) {
+  const number = new Intl.NumberFormat(locale[language], {
+    maximumFractionDigits: 3,
+  });
+  const range = hourRange(tasks);
+  return (
+    <section className="ws-task-estimates">
+      <h3>{t("Task estimates")}</h3>
+      <ol>
+        {tasks.map((task, index) => (
+          <li key={index}>
+            <strong>
+              {task.task} · {number.format(task.minHours)}–
+              {number.format(task.maxHours)} {t("h")}
+            </strong>
+            <p>
+              {t("Assumptions")}: {task.assumptions}
+            </p>
+          </li>
+        ))}
+      </ol>
+      <p>
+        {t("Total range")} · {number.format(range.min)}–
+        {number.format(range.max)} {t("h")}
+        <br />
+        {t("Midpoint estimate")} · {number.format(range.midpoint)} {t("h")}
+      </p>
+    </section>
+  );
+}
 
 const date = (value: string, language: Language) =>
   new Date(value).toLocaleDateString(locale[language]);
@@ -152,8 +216,10 @@ export function exportCsv(reviews: Review[], t: Translate, language: Language) {
       t("Exact contract quote"),
       t("Reasoning"),
       t("Estimated hours"),
-      t("Hourly rate (USD)"),
-      t("Estimated extra work") + " (USD)",
+      t("Task estimates"),
+      t("Currency"),
+      t("Hourly rate"),
+      t("Estimated extra work"),
     ],
     ...reviews.map((r) => [
       r.name,
@@ -165,6 +231,21 @@ export function exportCsv(reviews: Review[], t: Translate, language: Language) {
       r.evidence,
       r.reasoning,
       r.hours,
+      r.tasks
+        ?.map(
+          (task) =>
+            task.task +
+            " (" +
+            task.minHours +
+            "–" +
+            task.maxHours +
+            " " +
+            t("h") +
+            "): " +
+            task.assumptions,
+        )
+        .join("\n") ?? "",
+      reviewCurrency(r),
       r.rate,
       extraWork(r).toFixed(2),
     ]),
@@ -201,7 +282,7 @@ export function FindingsReport({
   name: string;
   t: Translate;
   language: Language;
-  money: (value: number) => string;
+  money: (value: number, currency: Currency) => string;
 }) {
   return (
     <article className="ws-print">
@@ -217,8 +298,7 @@ export function FindingsReport({
       <p>{t("Report estimates are based on saved reviews.")}</p>
       <p>
         <b>
-          {t("Estimated extra work")} ·{" "}
-          {money(reviews.reduce((sum, r) => sum + extraWork(r), 0))}
+          {t("Estimated extra work")} · {formattedTotals(reviews, money)}
         </b>
       </p>
       {reviews.map((r) => (
@@ -238,9 +318,12 @@ export function FindingsReport({
           </p>
           {r.evidence && <blockquote>{r.evidence}</blockquote>}
           <p>{r.reasoning}</p>
+          {r.tasks && (
+            <TaskEstimates tasks={r.tasks} language={language} t={t} />
+          )}
           <p>
-            {r.hours} {t("h")} × {money(r.rate)} / {t("h")} ·{" "}
-            {t("Estimated extra work")} {money(extraWork(r))}
+            {r.hours} {t("h")} × {money(r.rate, reviewCurrency(r))} / {t("h")} ·{" "}
+            {t("Estimated extra work")} {money(extraWork(r), reviewCurrency(r))}
           </p>
         </section>
       ))}

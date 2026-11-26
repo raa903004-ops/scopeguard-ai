@@ -418,6 +418,25 @@ const ru = {
   "Start analysis": "Начать анализ",
   "Open project": "Открыть проект",
   "App version": "Версия приложения",
+  "Invalid task estimates. Enter a task, an assumption and a valid range for each item.":
+    "Для каждой задачи укажите название, допущение и корректный диапазон часов.",
+  "The model answered in a different language. Retry or use manual review.":
+    "Модель ответила на другом языке. Повторите анализ или проверьте запрос вручную.",
+  "Hourly rate": "Почасовая ставка",
+  Currency: "Валюта",
+  "Enter a valid hourly rate.": "Укажите корректную почасовую ставку.",
+  "Contract rate suggestion": "Ставка из договора",
+  "Use contract rate": "Применить ставку",
+  "Task estimates": "Оценки по задачам",
+  Task: "Задача",
+  "Minimum hours": "Минимум часов",
+  "Maximum hours": "Максимум часов",
+  Assumptions: "Допущения",
+  "Add task": "Добавить задачу",
+  "Remove task": "Удалить задачу",
+  "Total range": "Общий диапазон",
+  "Midpoint estimate": "Оценка по середине диапазона",
+  "Chart currency": "Валюта графиков",
 };
 
 export type Message = keyof typeof ru;

@@ -645,3 +645,25 @@
 .ws-empty-actions {
   margin: 0 0 16px;
 }
+.ws-task-range {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.ws-task-estimates {
+  margin-block: 1rem;
+  overflow-wrap: anywhere;
+}
+.ws-task-estimates h3 {
+  font-weight: 650;
+  margin-bottom: 0.6rem;
+}
+.ws-task-estimates li,
+.ws-task-edit,
+.ws-rate-suggestion {
+  border-top: 1px solid var(--line);
+  padding-block: 0.6rem;
+}
+.ws-task-estimates li p {
+  margin: 0.25rem 0;
+}

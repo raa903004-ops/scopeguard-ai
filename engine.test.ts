@@ -1,8 +1,11 @@
+import { extractHourlyRate, hourRange } from "./estimates.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { prebuiltAppConfig } from "@mlc-ai/web-llm";
 import {
   analyze,
+  analysisPrompt,
+  validateGenerated,
   compatibleModels,
   readFile,
   revenue,
@@ -84,4 +87,93 @@ test("reads plain text and rejects unsupported or blank files", async () => {
   assert.equal(await readFile(new File([contract], "agreement.TXT")), contract);
   await assert.rejects(readFile(new File([" "], "blank.txt")));
   await assert.rejects(readFile(new File(["text"], "contract.docx")));
+});
+
+test("extracts a single contractual hourly rate with verbatim evidence", () => {
+  for (const [clause, rate, currency] of [
+    ["Hourly rate: USD 125.50", 125.5, "USD"],
+    ["€80/hour", 80, "EUR"],
+    ["2\u202f500,75 руб. в час", 2500.75, "RUB"],
+    ["₽3 500/ч", 3500, "RUB"],
+    ["1.250,50 EUR per hour", 1250.5, "EUR"],
+  ] as const) {
+    assert.deepEqual(extractHourlyRate("Terms\n" + clause + "\nEnd"), {
+      rate,
+      currency,
+      evidence: clause,
+    });
+  }
+  assert.equal(extractHourlyRate("Fixed price: USD 500."), undefined);
+  assert.equal(
+    extractHourlyRate("100 EUR/hour for design. 150 EUR/hour for development."),
+    undefined,
+  );
+  assert.equal(extractHourlyRate("€100–€150/hour"), undefined);
+  assert.equal(extractHourlyRate("Hourly rate: 100–150 EUR/hour"), undefined);
+  assert.equal(extractHourlyRate("-€100/hour"), undefined);
+});
+
+test("derives totals from every task range and ignores a supplied total", () => {
+  const tasks = [
+    { task: "Layout", minHours: 1.01, maxHours: 2, assumptions: "One layout." },
+    { task: "Review", minHours: 0.5, maxHours: 1, assumptions: "One round." },
+  ];
+  assert.deepEqual(hourRange(tasks), { min: 1.51, max: 3, midpoint: 2.255 });
+  assert.equal(
+    validateGenerated({ ...result, hours: 999, tasks }, contract, "en").hours,
+    2.255,
+  );
+  assert.equal(revenue(2.255, 100), 225.5);
+  assert.equal(revenue(1.005, 1), 1.01);
+  for (const task of [
+    { ...tasks[0], minHours: 3 },
+    { ...tasks[0], minHours: 0.123 },
+    { ...tasks[0], assumptions: "" },
+  ])
+    assert.throws(
+      () => validateGenerated({ ...result, tasks: [task] }, contract, "en"),
+      /Invalid task estimates/,
+    );
+  assert.throws(
+    () => validateGenerated(result, contract, "en"),
+    /Invalid task estimates/,
+  );
+});
+
+test("localizes generated reasoning and assumptions but preserves quotes verbatim", () => {
+  const tasks = [
+    { task: "Хостинг", minHours: 1, maxHours: 2, assumptions: "Один сайт." },
+  ];
+  const russian = { ...result, reasoning: "Договор исключает хостинг.", tasks };
+  assert.match(
+    analysisPrompt("ru", false),
+    /Write all generated prose in Russian/,
+  );
+  assert.match(
+    analysisPrompt("en", true),
+    /Write all generated prose in English/,
+  );
+  assert.equal(validateGenerated(russian, contract, "ru").evidence, contract);
+  assert.throws(
+    () => validateGenerated(russian, contract, "en"),
+    /different language/,
+  );
+  assert.throws(
+    () =>
+      validateGenerated(
+        { ...russian, tasks: [{ ...tasks[0], assumptions: "One site only." }] },
+        contract,
+        "ru",
+      ),
+    /different language/,
+  );
+  assert.throws(
+    () =>
+      validateGenerated(
+        { ...russian, evidence: "Хостинг исключён." },
+        contract,
+        "ru",
+      ),
+    /Evidence must match/,
+  );
 });
