@@ -1,3 +1,9 @@
+import { scopeCases } from "./scope-cases.ts";
+import {
+  directClassification,
+  retrieveClauses,
+  validateClassification,
+} from "./retrieval.ts";
 import {
   compareContracts,
   financialTotals,
@@ -511,4 +517,94 @@ test("never accepts a definite decision contradicted by its exact citation", () 
   assert.equal(review.evidence, contract);
   assert.equal(review.hours, 0);
   assert.equal(review.tasks, undefined);
+});
+
+for (const [id, contractText, request, expected, citation] of scopeCases) {
+  test("scope regression: " + id, () => {
+    const clauses = contractClauses(contractText);
+    const direct = directClassification(clauses, request);
+    const candidates = retrieveClauses(clauses, request);
+    if (citation) {
+      assert.ok(contractText.includes(citation));
+      assert.ok(candidates.includes(citation));
+    }
+    if (direct) {
+      assert.equal(direct.status, expected);
+      assert.equal(direct.evidence, citation ?? "");
+      return;
+    }
+    if (!candidates.length) assert.equal(expected, "uncertain");
+    // This verifies the validation path for a correctly labelled response, not model accuracy.
+    const decoded = validateClassification(
+      {
+        status: expected,
+        clause: citation ? candidates.indexOf(citation) + 1 : 0,
+      },
+      candidates,
+      request,
+      false,
+    );
+    assert.equal(decoded.status, expected);
+    assert.equal(decoded.evidence, citation ?? "");
+  });
+}
+
+test("retrieves a relevant verbatim clause from a long contract", () => {
+  const relevant = "An icon set is part of the deliverables.";
+  const contractText =
+    Array.from(
+      { length: 600 },
+      (_, i) => "Section " + i + ". Payment is due at the end of the month.",
+    ).join("\n") +
+    "\n" +
+    relevant;
+  assert.equal(
+    retrieveClauses(
+      contractClauses(contractText),
+      "Please add an icon set.",
+    )[0],
+    relevant,
+  );
+});
+
+test("rejects malformed, contradictory and partial citations and keeps uncertainty after retry", () => {
+  const evidence = "Homepage design is included.";
+  assert.throws(
+    () =>
+      validateClassification(
+        { status: "in_scope", clause: 7 },
+        [evidence],
+        "Please add homepage design.",
+        false,
+      ),
+    /Invalid classification/,
+  );
+  assert.throws(
+    () =>
+      validateClassification(
+        { status: "out_of_scope", clause: 1 },
+        [evidence],
+        "Please add homepage design.",
+        false,
+      ),
+    /Unsupported classification/,
+  );
+  assert.equal(
+    validateClassification(
+      { status: "in_scope", clause: 1 },
+      [evidence],
+      "Please add homepage design and provide translation.",
+      true,
+    ).status,
+    "uncertain",
+  );
+  assert.equal(
+    validateClassification(
+      { status: "out_of_scope", clause: 1 },
+      ["Basic reporting is included, but custom reporting is excluded."],
+      "Please add basic reporting and provide custom reporting.",
+      true,
+    ).status,
+    "uncertain",
+  );
 });

@@ -556,6 +556,10 @@ const ru = {
     "Решение модели противоречит цитате из договора.",
   "The AI estimate could not be verified. Review the request and contract manually.":
     "Оценку ИИ не удалось подтвердить. Сверьте запрос и договор вручную.",
+  "The retrieved contract clauses did not establish the scope of the whole request.":
+    "Найденные пункты договора не определяют объём всего запроса.",
+  "The scope was classified, but the model estimate needs manual review.":
+    "Объём работ определён, но оценку модели нужно проверить вручную.",
 };
 
 export type Message = keyof typeof ru;

@@ -19,3 +19,6 @@
 
 На бесплатном тарифе Pages подключите репозиторий, задайте Node.js 24, сборку `npm run build` и каталог `dist`. Для прямой загрузки после сборки выполните `npx wrangler pages deploy dist --project-name scopeguard-ai` в своём аккаунте. Конфигурация находится в `wrangler.toml`. Серверные функции, ключи API и платёжная система не требуются. [Настройки сборки Pages](https://developers.cloudflare.com/pages/configuration/build-configuration/)
 
+## Проверка классификации
+
+В режиме `npm run dev` на устройстве с WebGPU откройте консоль браузера и выполните `await (await import("/scope-benchmark.ts")).runScopeBenchmark()`. Набор из 30 синтетических сценариев проверяет статус и дословную цитату. Результаты бенчмарка не сохраняются в проектах.
