@@ -230,3 +230,10 @@
     font-size: 0.72rem;
   }
 }
+
+.ws-error-detail {
+  display: block;
+  margin-top: 0.4rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

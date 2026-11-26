@@ -78,10 +78,10 @@ const validRate = (rate: string) =>
   Number(rate) >= 0 &&
   Number(rate) <= 100000 &&
   /^\d+(\.\d{1,2})?$/.test(rate);
-const errorKey = (err: unknown): Message =>
+const reviewError = (err: unknown) =>
   err instanceof MessageError
-    ? err.key
-    : "The operation could not be completed.";
+    ? err
+    : new MessageError("The operation could not be completed.");
 function Panel({
   title,
   icon,
@@ -169,7 +169,7 @@ export default function Workspace({
   const [manual, setManual] = useState<Result>({ ...blankReview });
   const [activity, setActivity] = useState<Message>();
   const [progress, setProgress] = useState<number>();
-  const [error, setError] = useState<Message>();
+  const [error, setError] = useState<MessageError>();
   const [notice, setNotice] = useState<Message>();
   const [detail, setDetail] = useState<Review>();
   const [draft, setDraft] = useState("");
@@ -197,7 +197,7 @@ export default function Workspace({
       }
     };
     void init().catch((err) => {
-      if (active) setError(errorKey(err));
+      if (active) setError(reviewError(err));
     });
     void hasGPU()
       .then((ok) => {
@@ -223,7 +223,7 @@ export default function Workspace({
     try {
       await fn();
     } catch (err) {
-      setError(errorKey(err));
+      setError(reviewError(err));
     } finally {
       setActivity(undefined);
       setProgress(undefined);
@@ -377,11 +377,15 @@ export default function Workspace({
         const field = event.target;
         if (field !== field.form?.querySelector(":invalid")) return;
         setNotice(undefined);
-        setError(field.validity.valueMissing ? requiredField : invalidNumber);
+        setError(
+          new MessageError(
+            field.validity.valueMissing ? requiredField : invalidNumber,
+          ),
+        );
         field.focus();
       }}
       onInputCapture={() => {
-        if (error === requiredField || error === invalidNumber)
+        if (error?.key === requiredField || error?.key === invalidNumber)
           setError(undefined);
       }}
     >
@@ -409,7 +413,10 @@ export default function Workspace({
       </div>
       {error && (
         <p className="ws-error" role="alert">
-          {t(error)}
+          {t(error.key)}
+          {error.detail && (
+            <span className="ws-error-detail">{error.detail}</span>
+          )}
         </p>
       )}
       {feedback && (

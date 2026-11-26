@@ -222,6 +222,11 @@ const ru = {
   "Choose a PDF or TXT file.": "Выберите файл PDF или TXT.",
   "No readable text found. Paste contract text manually.":
     "Не найдено читаемого текста. Вставьте текст договора вручную.",
+  "Preparing fallback model…": "Подготовка резервной модели…",
+  "No compatible model was found in the installed WebLLM catalog.":
+    "В установленном каталоге WebLLM нет совместимой модели.",
+  "Could not initialize a local model. Try again or use manual review.":
+    "Не удалось загрузить локальную модель. Повторите попытку или проверьте договор вручную.",
   "Could not run the local model. Try again or use manual review.":
     "Не удалось запустить локальную модель. Повторите попытку или проверьте договор вручную.",
   "Could not read the file. Check that it opens or paste the contract text.":
@@ -242,10 +247,12 @@ export const locale = { en: "en-US", ru: "ru-RU" };
 
 export class MessageError extends Error {
   readonly key: Message;
+  readonly detail?: string;
 
-  constructor(key: Message) {
+  constructor(key: Message, detail?: string) {
     super(key);
     this.key = key;
+    this.detail = detail;
   }
 }
 

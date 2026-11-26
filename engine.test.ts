@@ -1,6 +1,31 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { analyze, readFile, revenue, validate } from "./engine.ts";
+import { prebuiltAppConfig } from "@mlc-ai/web-llm";
+import {
+  analyze,
+  compatibleModels,
+  readFile,
+  revenue,
+  validate,
+} from "./engine.ts";
+
+test("orders installed models that can run without shader-f16", () => {
+  const preferred = "SmolLM3-3B-q4f32_1-MLC";
+  const fallback = "Llama-3.2-1B-Instruct-q4f32_1-MLC";
+  const catalog = prebuiltAppConfig.model_list;
+  assert.deepEqual(compatibleModels(catalog, new Set()), [preferred, fallback]);
+  const requiringF16 = catalog.map((model) =>
+    model.model_id === preferred
+      ? { ...model, required_features: ["shader-f16"] }
+      : model,
+  );
+  assert.deepEqual(compatibleModels(requiringF16, new Set()), [fallback]);
+  assert.deepEqual(compatibleModels(requiringF16, new Set(["shader-f16"])), [
+    preferred,
+    fallback,
+  ]);
+  assert.deepEqual(compatibleModels([], new Set()), []);
+});
 
 const contract = "Hosting is excluded.";
 const result = {

@@ -1,4 +1,4 @@
-import type { MLCEngine } from "@mlc-ai/web-llm";
+import type { MLCEngine, ModelRecord } from "@mlc-ai/web-llm";
 
 import { MessageError, type Language, type Message } from "./i18n.ts";
 
@@ -52,15 +52,101 @@ export function revenue(hours: number, rate: number): number {
   return Math.round(hours * cents + Number.EPSILON) / 100;
 }
 
+type Adapter = { features: { has(feature: string): boolean } };
+const requestAdapter = () =>
+  (
+    navigator as Navigator & {
+      gpu?: {
+        requestAdapter(options: {
+          powerPreference: string;
+        }): Promise<Adapter | null>;
+      };
+    }
+  ).gpu?.requestAdapter({ powerPreference: "high-performance" });
+
 export async function hasGPU(): Promise<boolean> {
   try {
-    const gpu = (
-      navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }
-    ).gpu;
-    return Boolean(await gpu?.requestAdapter());
+    return Boolean(await requestAdapter());
   } catch {
     return false;
   }
+}
+
+const preferredModel = "SmolLM3-3B-q4f32_1-MLC";
+const fallbackModel = "Llama-3.2-1B-Instruct-q4f32_1-MLC";
+
+export function compatibleModels(
+  catalog: ModelRecord[],
+  features: Adapter["features"],
+) {
+  return [preferredModel, fallbackModel].filter((id) =>
+    catalog.some(
+      (model) =>
+        model.model_id === id &&
+        (model.required_features ?? []).every((feature) =>
+          features.has(feature),
+        ),
+    ),
+  );
+}
+
+type Progress = (text: Message, progress?: number) => void;
+
+async function initialize(onProgress: Progress): Promise<MLCEngine> {
+  const failures: string[] = [];
+  try {
+    const adapter = await requestAdapter();
+    if (!adapter)
+      throw new MessageError("WebGPU is unavailable. Use manual review.");
+    const { MLCEngine, prebuiltAppConfig } = await import("@mlc-ai/web-llm");
+    const models = compatibleModels(
+      prebuiltAppConfig.model_list,
+      adapter.features,
+    );
+    if (!models.length)
+      throw new MessageError(
+        "No compatible model was found in the installed WebLLM catalog.",
+      );
+    for (const id of models) {
+      onProgress(
+        id === preferredModel
+          ? "Preparing local model…"
+          : "Preparing fallback model…",
+      );
+      const candidate = new MLCEngine({
+        initProgressCallback: (report) =>
+          onProgress("Downloading local model…", report.progress),
+        logLevel: "SILENT",
+      });
+      try {
+        await candidate.reload(
+          id,
+          id === preferredModel
+            ? {
+                // SmolLM3 defaults to /think. Use its direct-answer mode for strict JSON.
+                conv_config: {
+                  system_template:
+                    "<|im_start|>system\nReasoning Mode: /no_think\n\n{system_message}\n\n",
+                },
+              }
+            : undefined,
+        );
+        return candidate;
+      } catch (error) {
+        failures.push(
+          id + ": " + (error instanceof Error ? error.message : String(error)),
+        );
+        await candidate.unload().catch(() => undefined);
+      }
+    }
+  } catch (error) {
+    if (error instanceof MessageError) throw error;
+    failures.push(error instanceof Error ? error.message : String(error));
+  }
+  throw new MessageError(
+    "Could not initialize a local model. Try again or use manual review.",
+    failures.join("\n"),
+  );
 }
 
 const schema = {
@@ -80,7 +166,7 @@ let working = false;
 export async function analyze(
   contract: string,
   request: string,
-  onProgress: (text: Message, progress?: number) => void,
+  onProgress: Progress,
   excerpt = "",
   language: Language = "en",
 ): Promise<Result> {
@@ -106,17 +192,7 @@ export async function analyze(
   if (working) throw new MessageError("A local analysis is already running.");
   working = true;
   try {
-    if (!engine) {
-      if (!(await hasGPU()))
-        throw new MessageError("WebGPU is unavailable. Use manual review.");
-      onProgress("Preparing local model…");
-      const { CreateMLCEngine } = await import("@mlc-ai/web-llm");
-      engine = await CreateMLCEngine("Qwen2.5-0.5B-Instruct-q4f32_1-MLC", {
-        initProgressCallback: (report) =>
-          onProgress("Downloading local model…", report.progress),
-        logLevel: "SILENT",
-      });
-    }
+    engine ??= await initialize(onProgress);
     onProgress("Comparing the request with the contract…");
     const response = await engine.chat.completions.create({
       messages: [
