@@ -109,9 +109,11 @@ function Panel({
 export default function Workspace({
   page,
   language,
+  sampleMode = false,
 }: {
   page: string;
   language: Language;
+  sampleMode?: boolean;
 }) {
   const t = translate(language);
   const number = new Intl.NumberFormat(locale[language], {
@@ -958,6 +960,23 @@ export default function Workspace({
         </div>
       ) : (
         <>
+          {ready && (sampleMode || !projects.length) && (
+            <Panel
+              title={t(sampleMode ? "Live AI demo" : "Try a sample contract")}
+              icon={<FileText />}
+            >
+              <p>
+                {t(
+                  sampleMode
+                    ? "Use a fictional contract and run a real review with WebLLM on your device. The first run downloads model weights."
+                    : "Start with a fictional agreement and a client request. Run your first local analysis when ready.",
+                )}
+              </p>
+              <Button disabled={disabled} onClick={() => void loadSample()}>
+                {t("Load sample contract")}
+              </Button>
+            </Panel>
+          )}
           <div className="ws-stats">
             {[
               [
@@ -1001,18 +1020,6 @@ export default function Workspace({
               <RevenueByProject reviews={realReviews} t={t} money={money} />
             </Panel>
           </div>
-          {ready && !projects.length && (
-            <Panel title={t("Try a sample contract")} icon={<FileText />}>
-              <p>
-                {t(
-                  "Start with a fictional agreement and a client request. Run your first local analysis when ready.",
-                )}
-              </p>
-              <Button disabled={disabled} onClick={() => void loadSample()}>
-                {t("Load sample contract")}
-              </Button>
-            </Panel>
-          )}
           <div className="ws-grid">
             <div>
               {!project || editing ? (

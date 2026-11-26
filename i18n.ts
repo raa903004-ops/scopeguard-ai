@@ -301,7 +301,7 @@ const ru = {
   "Stopping analysis…": "Останавливаем анализ…",
   "Analysis stopped.": "Анализ остановлен.",
   "Spot extra work before it goes unbilled.":
-    "Выявляйте дополнительные работы до того, как они останутся неоплаченными.",
+    "Выявляйте дополнительные работы до потери выручки.",
   "See the clause, estimate the work and send a clear response to your client.":
     "Найдите пункт договора, оцените работу и подготовьте понятный ответ клиенту.",
   "Cite the agreement": "Ссылайтесь на договор",
@@ -345,6 +345,44 @@ const ru = {
   Privacy: "Конфиденциальность",
   "Model weights are downloaded on first use. Your contract and client requests are processed on this device.":
     "Веса модели скачиваются при первом запуске. Договор и запросы клиентов обрабатываются на этом устройстве.",
+  "Catch out-of-scope work": "Выявляйте работы вне договора",
+  "before it goes unpaid.": "до того, как они останутся неоплаченными.",
+  "Compare client requests to your contract, find the exact clause, and estimate what to charge for extra work.":
+    "Сверяйте запросы клиентов с договором, находите нужный пункт и оценивайте стоимость дополнительных работ.",
+  "Try free": "Попробовать бесплатно",
+  "Try the AI demo": "Попробовать ИИ-демо",
+  "View prepared examples": "Посмотреть готовые примеры",
+  "No account or card required": "Без регистрации и карты",
+  "Live AI demo": "Демо с локальным ИИ",
+  "Use a fictional contract and run a real review with WebLLM on your device. The first run downloads model weights.":
+    "Загрузите вымышленный договор и запустите реальную проверку с WebLLM на своём устройстве. При первом запуске браузер скачает модель.",
+  "Contact the project": "Связаться с командой",
+  "Send feedback": "Оставить отзыв",
+  "Report a bug": "Сообщить об ошибке",
+  "Feedback and bug reports are public on GitHub. Leave out client names, contracts and other private information.":
+    "Отзывы и сообщения об ошибках публикуются на GitHub. Не добавляйте имена клиентов, договоры и другие личные данные.",
+  "Privacy policy": "Политика конфиденциальности",
+  "Where your data lives": "Где хранятся данные",
+  "Your contracts, requests and saved reviews stay in this browser’s IndexedDB. Theme and language choices are stored in localStorage.":
+    "Договоры, запросы и сохранённые проверки остаются в IndexedDB этого браузера. Тема и язык хранятся в localStorage.",
+  "Network requests": "Сетевые запросы",
+  "GitHub Pages serves the app. For local AI, your browser downloads public model files from Hugging Face and runtime assets from GitHub. Contract and request text are processed on your device.":
+    "Приложение загружается с GitHub Pages. Для локального ИИ браузер скачивает общедоступные веса с Hugging Face и файлы среды выполнения с GitHub. Текст договоров и запросов обрабатывается на устройстве.",
+  "Export and delete": "Экспорт и удаление",
+  "Export or delete your workspace in Settings. To clear cached model files and preferences as well, clear site data in your browser.":
+    "В настройках можно экспортировать или удалить рабочие данные. Чтобы также удалить скачанные модели и настройки интерфейса, очистите данные сайта в браузере.",
+  "Public support channels": "Публичные каналы поддержки",
+  "When you open a GitHub feedback link, GitHub handles your submission under its privacy policy. The app does not attach workspace data.":
+    "Если вы перейдёте по ссылке для обратной связи, GitHub обработает сообщение по своей политике конфиденциальности. Приложение не прикрепляет рабочие данные.",
+  "Read the privacy policy": "Читать политику конфиденциальности",
+  "ScopeGuard AI | Find and price out-of-scope client work":
+    "ScopeGuard AI | Оценка работ вне договора",
+  "Compare client requests with contracts, cite the exact clause, and estimate extra work. Free, browser-local AI and manual review.":
+    "Сверяйте запросы клиентов с договорами, цитируйте точные пункты и оценивайте допработы. Бесплатная локальная проверка с ИИ или вручную.",
+  "ScopeGuard AI | Privacy policy":
+    "ScopeGuard AI | Политика конфиденциальности",
+  "How ScopeGuard AI stores contracts locally, downloads AI models and lets you export or delete your workspace.":
+    "Как ScopeGuard AI хранит договоры локально, скачивает модели и позволяет экспортировать или удалять рабочие данные.",
 };
 
 export type Message = keyof typeof ru;

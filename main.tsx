@@ -15,6 +15,9 @@ import Landing from "./Landing";
 import Workspace from "./Workspace";
 import { Button } from "./button";
 import { translate, type Language } from "./i18n";
+const privacyPage = location.pathname.endsWith("/privacy.html");
+const homeLink = privacyPage ? "./" : "";
+const issues = "https://github.com/raa903004-ops/scopeguard-ai/issues";
 const routes = ["dashboard", "projects", "settings", "pricing"];
 function current() {
   return location.hash.slice(1).toLowerCase();
@@ -22,7 +25,11 @@ function current() {
 function Brand({ language }: { language: Language }) {
   const t = translate(language);
   return (
-    <a className="brand" href="#home" aria-label={t("ScopeGuard AI home")}>
+    <a
+      className="brand"
+      href={homeLink + "#home"}
+      aria-label={t("ScopeGuard AI home")}
+    >
       <span className="brand-icon">
         <ShieldCheck size={23} />
       </span>
@@ -65,12 +72,46 @@ function Pricing({ language }: { language: Language }) {
           ))}
         </ul>
         <a href="#dashboard" className="nav-cta">
-          {t("Get early access")}
+          {t("Try free")}
         </a>
       </section>
     </main>
   );
 }
+function Privacy({ language }: { language: Language }) {
+  const t = translate(language);
+  return (
+    <main className="sg-feature-section policy">
+      <h1>{t("Privacy policy")}</h1>
+      {(
+        [
+          [
+            "Where your data lives",
+            "Your contracts, requests and saved reviews stay in this browser’s IndexedDB. Theme and language choices are stored in localStorage.",
+          ],
+          [
+            "Network requests",
+            "GitHub Pages serves the app. For local AI, your browser downloads public model files from Hugging Face and runtime assets from GitHub. Contract and request text are processed on your device.",
+          ],
+          [
+            "Export and delete",
+            "Export or delete your workspace in Settings. To clear cached model files and preferences as well, clear site data in your browser.",
+          ],
+          [
+            "Public support channels",
+            "When you open a GitHub feedback link, GitHub handles your submission under its privacy policy. The app does not attach workspace data.",
+          ],
+        ] as const
+      ).map(([title, copy]) => (
+        <section key={title}>
+          <h2>{t(title)}</h2>
+          <p>{t(copy)}</p>
+        </section>
+      ))}
+    </main>
+  );
+}
+
 function App() {
   const [language, setLanguage] = useState<Language>(() => {
     try {
@@ -82,15 +123,27 @@ function App() {
   const t = translate(language);
   useEffect(() => {
     document.documentElement.lang = language;
-    document.title = t("ScopeGuard AI · Contract review");
-    document
-      .querySelector('meta[name="description"]')
-      ?.setAttribute(
-        "content",
-        t(
-          "Review client requests against your contracts and estimate unbilled work privately in your browser.",
-        ),
-      );
+    const title = t(
+      privacyPage
+        ? "ScopeGuard AI | Privacy policy"
+        : "ScopeGuard AI | Find and price out-of-scope client work",
+    );
+    const description = t(
+      privacyPage
+        ? "How ScopeGuard AI stores contracts locally, downloads AI models and lets you export or delete your workspace."
+        : "Compare client requests with contracts, cite the exact clause, and estimate extra work. Free, browser-local AI and manual review.",
+    );
+    document.title = title;
+    for (const [selector, value] of [
+      [
+        'meta[name="description"], meta[property="og:description"], meta[name="twitter:description"]',
+        description,
+      ],
+      ['meta[property="og:title"], meta[name="twitter:title"]', title],
+    ])
+      document
+        .querySelectorAll(selector)
+        .forEach((meta) => meta.setAttribute("content", value));
     try {
       localStorage.setItem("sg-language", language);
     } catch {
@@ -124,7 +177,8 @@ function App() {
       /* Theme still applies for this session. */
     }
   }, [dark]);
-  const work = routes.slice(0, 3).includes(page);
+  const work =
+    !privacyPage && (page === "demo" || routes.slice(0, 3).includes(page));
   const labels = {
     home: t("Overview"),
     dashboard: t("Dashboard"),
@@ -147,9 +201,14 @@ function App() {
             {links.map((r) => (
               <a
                 key={r}
-                href={"#" + r}
+                href={homeLink + "#" + r}
                 aria-current={
-                  page === r || (!page && r === "home") ? "page" : undefined
+                  !privacyPage &&
+                  (page === r ||
+                    (page === "demo" && r === "dashboard") ||
+                    (!page && r === "home"))
+                    ? "page"
+                    : undefined
                 }
                 onClick={() => setMenu(false)}
               >
@@ -182,8 +241,8 @@ function App() {
               {dark ? <Sun size={18} /> : <Moon size={18} />}
             </Button>
             {!work && (
-              <a className="nav-cta" href="#dashboard">
-                {t("Get early access")}
+              <a className="nav-cta" href={homeLink + "#dashboard"}>
+                {t("Try free")}
               </a>
             )}
             <Button
@@ -199,8 +258,14 @@ function App() {
           </div>
         </div>
       </header>
-      {work ? (
-        <Workspace page={page} language={language} />
+      {privacyPage ? (
+        <Privacy language={language} />
+      ) : work ? (
+        <Workspace
+          page={page === "demo" ? "dashboard" : page}
+          language={language}
+          sampleMode={page === "demo"}
+        />
       ) : page === "pricing" ? (
         <Pricing language={language} />
       ) : (
@@ -209,7 +274,20 @@ function App() {
       <footer className="site-footer">
         <Brand language={language} />
         <span>{t("Private, on-device contract review")}</span>
-        <a href="#pricing">{t("Pricing")}</a>
+        <nav className="footer-links" aria-label={t("Contact the project")}>
+          <a href={homeLink + "#pricing"}>{t("Pricing")}</a>
+          <a href="./privacy.html">{t("Privacy policy")}</a>
+          <a href={issues}>{t("Contact the project")}</a>
+          <a href={issues + "/new?title=Product%20feedback"}>
+            {t("Send feedback")}
+          </a>
+          <a href={issues + "/new?title=Bug%20report"}>{t("Report a bug")}</a>
+        </nav>
+        <small>
+          {t(
+            "Feedback and bug reports are public on GitHub. Leave out client names, contracts and other private information.",
+          )}
+        </small>
       </footer>
     </>
   );

@@ -147,9 +147,6 @@ button:disabled {
   color: var(--muted);
   font-size: 0.85rem;
 }
-.site-footer > a:last-child {
-  margin-left: auto;
-}
 .pricing {
   width: min(960px, 90%);
   margin: 6rem auto;
@@ -271,5 +268,72 @@ html.dark {
 @media (max-width: 400px) {
   .head-actions > .nav-cta {
     display: none;
+  }
+}
+
+.site-footer {
+  flex-wrap: wrap;
+  column-gap: 1.2rem;
+  row-gap: 0.6rem;
+}
+.site-footer small {
+  width: 100%;
+}
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin-left: auto;
+}
+.footer-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+}
+.footer-links a:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+.policy {
+  max-width: 760px;
+}
+.policy h1 {
+  overflow-wrap: anywhere;
+  font-size: clamp(1.55rem, 6vw, 3.8rem);
+  line-height: 1.1;
+  font-weight: 650;
+  letter-spacing: -0.05em;
+}
+.policy section {
+  border-bottom: 1px solid var(--line);
+  padding-block: 1.25rem;
+}
+.policy section h2 {
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+}
+@media (max-width: 720px) {
+  .footer-links {
+    margin-left: 0;
+    width: 100%;
+  }
+  .footer-links a {
+    min-height: 44px;
+  }
+}
+@media (max-width: 360px) {
+  .head-inner .brand {
+    gap: 0.3rem;
+    font-size: 1.05rem;
+  }
+  .head-inner .brand-icon {
+    padding: 4px;
+  }
+  .head-inner .brand-icon svg {
+    width: 18px;
+    height: 18px;
+  }
+  .head-inner .head-actions {
+    gap: 0.12rem;
   }
 }

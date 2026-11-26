@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://raa903004-ops.github.io/scopeguard-ai/sitemap.xml

@@ -14,7 +14,6 @@ import {
   ScanLine,
   TriangleAlert,
 } from "lucide-react";
-import { Button } from "./button";
 import { locale, translate, type Language, type Translate } from "./i18n";
 import "./landing.css";
 
@@ -59,7 +58,7 @@ export default function Landing({ language }: { language: Language }) {
   const t = translate(language);
   const examples = examplesFor(t);
   const [index, setIndex] = useState(0);
-  const [roi, setRoi] = useState({ requests: "0", hours: "0", rate: "0" });
+  const [roi, setRoi] = useState({ requests: "3", hours: "2", rate: "100" });
   const [rate, setRate] = useState("125");
   const demo = useRef<HTMLElement>(null);
   const example = examples[index];
@@ -77,35 +76,41 @@ export default function Landing({ language }: { language: Language }) {
             <span /> {t("LOCAL-FIRST SCOPE INTELLIGENCE")}
           </span>
           <h1>
-            {t("Find the work")}
-            <br /> <em>{t("between")}</em> {t("the lines.")}
+            {t("Catch out-of-scope work")}
+            <br />
+            <em>{t("before it goes unpaid.")}</em>
           </h1>
           <p>
             {t(
-              "Catch out-of-scope requests before they become unpaid hours. Compare client requests against your contract, privately on your device.",
+              "Compare client requests to your contract, find the exact clause, and estimate what to charge for extra work.",
             )}
           </p>
           <div className="sg-actions">
-            <Button
-              onClick={() => {
-                location.hash = "dashboard";
-              }}
-            >
-              {t("Open workspace")}
-            </Button>
+            <a className="nav-cta" href="#dashboard">
+              {t("Try free")}
+            </a>
+            <a className="sg-demo-button" href="#demo">
+              <Play size={15} />
+              {t("Try the AI demo")}
+            </a>
             <button
-              className="sg-demo-button"
+              className="sg-examples-link"
               onClick={() => {
-                demo.current?.scrollIntoView({ behavior: "smooth" });
+                demo.current?.scrollIntoView({
+                  behavior: matchMedia("(prefers-reduced-motion: reduce)")
+                    .matches
+                    ? "instant"
+                    : "smooth",
+                });
                 demo.current?.focus({ preventScroll: true });
               }}
             >
-              <Play size={15} /> {t("Explore demo")}
+              {t("View prepared examples")}
             </button>
           </div>
           <div className="sg-private">
             <LockKeyhole size={14} /> {t("Private by design")}
-            <i /> {t("No account required")}
+            <i /> {t("No account or card required")}
           </div>
         </div>
         <div
@@ -391,8 +396,8 @@ export default function Landing({ language }: { language: Language }) {
             "Model weights are downloaded on first use. Your contract and client requests are processed on this device.",
           )}
         </p>
-        <a className="nav-cta" href="#dashboard">
-          {t("Open workspace")}
+        <a className="nav-cta" href="./privacy.html">
+          {t("Read the privacy policy")}
         </a>
       </section>
     </main>
