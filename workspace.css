@@ -325,7 +325,6 @@
     color: #171923;
     background: white;
   }
-  #root:has(.ws-print) > :not(.ws),
   .ws:has(.ws-print) > :not(.ws-print) {
     display: none !important;
   }
@@ -401,4 +400,196 @@
   background: var(--accent);
   border-radius: 6px;
   transition: width 0.2s ease;
+}
+
+.site-head[data-workspace="true"] .head-actions {
+  margin-left: auto;
+}
+.ws-shell {
+  display: grid;
+  grid-template-columns: minmax(184px, 220px) minmax(0, 1fr);
+  width: min(1640px, 100%);
+  margin-inline: auto;
+  min-height: calc(100dvh - 76px);
+}
+.ws-sidebar {
+  border-inline-end: 1px solid var(--line);
+  padding: clamp(18px, 2.5vw, 36px) 14px;
+}
+.ws-nav {
+  display: grid;
+  gap: 0.3rem;
+  position: sticky;
+  top: 16px;
+}
+.ws-nav a,
+.ws-nav-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  color: var(--muted);
+  border: 1px solid transparent;
+  border-radius: 9px;
+  font-size: 0.9rem;
+  font-weight: 550;
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease;
+}
+.ws-nav a svg,
+.ws-nav-toggle svg {
+  flex: none;
+}
+.ws-nav a:hover,
+.ws-nav a[aria-current="page"] {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--text);
+}
+.ws-nav a[aria-current="page"] svg {
+  color: var(--accent);
+}
+.ws-nav-toggle {
+  display: none;
+}
+.ws-shell .ws {
+  width: 100%;
+  min-width: 0;
+  padding: clamp(24px, 4vw, 52px) clamp(18px, 3vw, 48px) 64px;
+}
+.ws-shell .ws h1 {
+  font-size: clamp(2.15rem, 4vw, 3.25rem);
+}
+.ws-shell .ws-top {
+  gap: 18px;
+  align-items: flex-start;
+}
+.ws-shell .ws-top p {
+  margin-bottom: 0;
+}
+.ws-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+.ws-badges .ws-local,
+.ws-model {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.ws-model i {
+  width: 0.44rem;
+  height: 0.44rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+.ws-model[data-state="busy"] i {
+  background: var(--accent);
+}
+.ws-model[data-state="ready"] i {
+  background: #45975f;
+}
+.ws-project-picker {
+  max-width: 480px;
+}
+.ws-analysis {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
+}
+.ws-contract-column {
+  position: sticky;
+  top: 16px;
+}
+.ws-analysis .ws-contract {
+  max-height: min(65vh, 700px);
+}
+.ws-finding-anchor {
+  scroll-margin-top: 16px;
+}
+.ws-inline-link {
+  display: inline-flex;
+  padding: 0.45rem 0.7rem;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.ws .sg-button {
+  border-radius: 8px;
+}
+@media (max-width: 1000px) {
+  .ws-shell {
+    grid-template-columns: 170px minmax(0, 1fr);
+  }
+  .ws-badges {
+    justify-content: flex-start;
+  }
+  .ws-shell .ws-top {
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 800px) {
+  .ws-shell {
+    display: block;
+    min-height: calc(100dvh - 64px);
+  }
+  .ws-sidebar {
+    border-inline-end: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 8px 18px;
+  }
+  .ws-nav-toggle {
+    width: 100%;
+    display: flex;
+    border-color: var(--line);
+    background: var(--panel);
+    color: var(--text);
+  }
+  .ws-nav-toggle svg:last-child {
+    margin-inline-start: auto;
+  }
+  .ws-nav-toggle[aria-expanded="true"] svg:last-child {
+    transform: rotate(180deg);
+  }
+  .ws-nav {
+    position: static;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 8px;
+  }
+  .ws-nav[data-expanded="false"] {
+    display: none;
+  }
+}
+@media (max-width: 720px) {
+  .ws-analysis {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ws-contract-column {
+    position: static;
+  }
+  .ws-analysis .ws-contract {
+    max-height: 32vh;
+  }
+}
+@media print {
+  #root:has(.ws-print) > :not(.ws-shell),
+  .ws-shell:has(.ws-print) > .ws-sidebar {
+    display: none !important;
+  }
+  .ws-shell:has(.ws-print) {
+    display: block;
+    width: auto;
+    min-height: 0;
+  }
+  .ws-shell .ws:has(.ws-print) {
+    padding: 0;
+  }
 }

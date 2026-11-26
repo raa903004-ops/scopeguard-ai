@@ -13,12 +13,13 @@ import "@fontsource-variable/geist/index.css";
 import "./style.css";
 import Landing from "./Landing";
 import Workspace from "./Workspace";
+import { isWorkspaceView } from "./workspace-nav";
 import { Button } from "./button";
 import { translate, type Language } from "./i18n";
 const privacyPage = location.pathname.endsWith("/privacy.html");
 const homeLink = privacyPage ? "./" : "";
 const issues = "https://github.com/raa903004-ops/scopeguard-ai/issues";
-const routes = ["dashboard", "projects", "settings", "pricing"];
+
 function current() {
   return location.hash.slice(1).toLowerCase();
 }
@@ -177,45 +178,44 @@ function App() {
       /* Theme still applies for this session. */
     }
   }, [dark]);
-  const work =
-    !privacyPage && (page === "demo" || routes.slice(0, 3).includes(page));
+  const workspacePage =
+    page === "demo" ? "analysis" : isWorkspaceView(page) ? page : undefined;
+  const work = !privacyPage && workspacePage !== undefined;
   const labels = {
     home: t("Overview"),
     dashboard: t("Dashboard"),
-    projects: t("Projects"),
-    settings: t("Settings"),
     pricing: t("Pricing"),
   };
-  const links: (keyof typeof labels)[] = work
-    ? ["dashboard", "projects", "settings", "pricing"]
-    : ["home", "dashboard", "pricing"];
+  const links = ["home", "dashboard", "pricing"] as const;
   return (
     <>
-      <header className="site-head">
+      <header className="site-head" data-workspace={work}>
         <div className="head-inner">
           <Brand language={language} />
-          <nav
-            aria-label={t("Primary")}
-            className={menu ? "nav-links expanded" : "nav-links"}
-          >
-            {links.map((r) => (
-              <a
-                key={r}
-                href={homeLink + "#" + r}
-                aria-current={
-                  !privacyPage &&
-                  (page === r ||
-                    (page === "demo" && r === "dashboard") ||
-                    (!page && r === "home"))
-                    ? "page"
-                    : undefined
-                }
-                onClick={() => setMenu(false)}
-              >
-                {labels[r]}
-              </a>
-            ))}
-          </nav>
+          {!work && (
+            <nav
+              aria-label={t("Primary")}
+              className={menu ? "nav-links expanded" : "nav-links"}
+            >
+              {links.map((r) => (
+                <a
+                  key={r}
+                  href={homeLink + "#" + r}
+                  aria-current={
+                    !privacyPage &&
+                    (page === r ||
+                      (page === "demo" && r === "dashboard") ||
+                      (!page && r === "home"))
+                      ? "page"
+                      : undefined
+                  }
+                  onClick={() => setMenu(false)}
+                >
+                  {labels[r]}
+                </a>
+              ))}
+            </nav>
+          )}
           <div className="head-actions">
             <select
               className="language-switch"
@@ -245,24 +245,26 @@ function App() {
                 {t("Try free")}
               </a>
             )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="mobile-menu"
-              aria-expanded={menu}
-              aria-label={t("Toggle navigation")}
-              onClick={() => setMenu(!menu)}
-            >
-              {menu ? <X /> : <Menu />}
-            </Button>
+            {!work && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="mobile-menu"
+                aria-expanded={menu}
+                aria-label={t("Toggle navigation")}
+                onClick={() => setMenu(!menu)}
+              >
+                {menu ? <X /> : <Menu />}
+              </Button>
+            )}
           </div>
         </div>
       </header>
       {privacyPage ? (
         <Privacy language={language} />
-      ) : work ? (
+      ) : workspacePage ? (
         <Workspace
-          page={page === "demo" ? "dashboard" : page}
+          page={workspacePage}
           language={language}
           sampleMode={page === "demo"}
         />

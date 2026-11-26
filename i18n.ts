@@ -383,6 +383,40 @@ const ru = {
     "ScopeGuard AI | Политика конфиденциальности",
   "How ScopeGuard AI stores contracts locally, downloads AI models and lets you export or delete your workspace.":
     "Как ScopeGuard AI хранит договоры локально, скачивает модели и позволяет экспортировать или удалять рабочие данные.",
+  "Workspace navigation": "Навигация по рабочей области",
+  Analysis: "Анализ",
+  "AI Chat": "Чат с ИИ",
+  Analytics: "Аналитика",
+  Reports: "Отчёты",
+  "Review client requests and verify findings against the contract.":
+    "Сверяйте запросы клиентов с договором и проверяйте выводы по цитатам.",
+  "Ask the local model questions about your project agreement.":
+    "Задавайте локальной модели вопросы по договору проекта.",
+  "Track potential revenue from saved out-of-scope reviews.":
+    "Отслеживайте возможную выручку по сохранённым проверкам работ вне договора.",
+  "Export saved project findings as CSV or PDF.":
+    "Экспортируйте результаты проверок проекта в CSV или PDF.",
+  "Monitor your projects and recent review activity.":
+    "Следите за проектами и последними проверками.",
+  "Checking WebGPU": "Проверяем WebGPU",
+  "AI ready to load": "Модель готова к загрузке",
+  "AI model loaded": "Модель загружена",
+  "Local AI running": "Локальный ИИ работает",
+  "Manual review only": "Доступна ручная проверка",
+  "Recent reviews": "Последние проверки",
+  "Create or select a project to continue.":
+    "Создайте или выберите проект, чтобы продолжить.",
+  "Choose or create a project before starting a review.":
+    "Выберите или создайте проект перед началом проверки.",
+  "Start a review to build your history.":
+    "Запустите проверку, чтобы начать собирать историю.",
+  "Open reports": "Открыть отчёты",
+  "Choose a project to export its saved findings.":
+    "Выберите проект, чтобы экспортировать результаты его проверок.",
+  "No saved findings for this project yet.":
+    "У этого проекта ещё нет сохранённых результатов.",
+  "Start analysis": "Начать анализ",
+  "Open project": "Открыть проект",
 };
 
 export type Message = keyof typeof ru;

@@ -24,6 +24,7 @@ import {
 import {
   analyze,
   hasGPU,
+  isModelLoaded,
   readFile,
   revenue,
   validate,
@@ -48,6 +49,11 @@ import {
   statuses,
   type Review,
 } from "./insights";
+import {
+  WorkspaceNavigation,
+  workspaceViews,
+  type WorkspaceView,
+} from "./workspace-nav";
 import "./workspace.css";
 
 type Project = {
@@ -111,7 +117,7 @@ export default function Workspace({
   language,
   sampleMode = false,
 }: {
-  page: string;
+  page: WorkspaceView;
   language: Language;
   sampleMode?: boolean;
 }) {
@@ -180,8 +186,15 @@ export default function Workspace({
   const [notice, setNotice] = useState<Message>();
   const [detail, setDetail] = useState<Review>();
   const [draft, setDraft] = useState("");
+  const findingAnchor = useRef<HTMLDivElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const previousPage = useRef(page);
+  useEffect(() => {
+    if (previousPage.current !== page)
+      heading.current?.focus({ preventScroll: true });
+    previousPage.current = page;
+  }, [page]);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [editing, setEditing] = useState(false);
   const [editFinding, setEditFinding] = useState<{
     result: Result;
     rate: string;
@@ -277,6 +290,14 @@ export default function Workspace({
     setEditFinding(undefined);
     setDraft("");
   }
+  function inspectReview(review: Review) {
+    const target = projects.find((p) => p.id === review.project);
+    if (!target) return;
+    if (selected !== target.id) choose(target);
+    openReview(review);
+    if (page !== "analysis") location.hash = "analysis";
+    else findingAnchor.current?.focus();
+  }
   function choose(p: Project) {
     select(p.id);
     setEditFinding(undefined);
@@ -290,7 +311,6 @@ export default function Workspace({
     setRequest("");
     setExcerpt("");
     setManual({ ...blankReview });
-    setEditing(false);
   }
   async function saveProject(event: FormEvent) {
     event.preventDefault();
@@ -336,6 +356,7 @@ export default function Workspace({
       setNotice(
         "Sample loaded. Run local analysis to generate the first finding.",
       );
+      if (page !== "analysis") location.hash = "analysis";
     });
   }
 
@@ -574,6 +595,69 @@ export default function Workspace({
     );
   }
   const disabled = !ready || !!activity;
+  const projectPicker = (
+    <label className="ws-project-picker">
+      {t("Project")}
+      <select
+        value={selected}
+        disabled={disabled}
+        onChange={(e) => {
+          const picked = projects.find((p) => p.id === e.target.value);
+          if (picked) choose(picked);
+        }}
+      >
+        {projects.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+            {p.synthetic ? " · " + t("Sample project") : ""}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+  const excerptField = (
+    <details>
+      <summary>{t("Review a contract excerpt")}</summary>
+      <label>
+        {t("Exact excerpt (optional)")}
+        <textarea
+          rows={4}
+          value={excerpt}
+          onChange={(e) => setExcerpt(e.target.value)}
+          placeholder={t("Copy relevant clauses from the contract above.")}
+        />
+      </label>
+    </details>
+  );
+  const missingProject = (
+    <Panel title={t("Projects")} icon={<Folder />}>
+      <p>{t("Create or select a project to continue.")}</p>
+      <a className="sg-button sg-solid" href="#projects">
+        {t("Projects")}
+      </a>
+    </Panel>
+  );
+  function historyItem(r: Review) {
+    return (
+      <button
+        disabled={disabled}
+        className="ws-history"
+        key={r.id}
+        aria-current={page === "analysis" && detail?.id === r.id}
+        onClick={() => inspectReview(r)}
+      >
+        <b>{t(statuses[r.status])}</b>
+        <span>{r.request}</span>
+        <small>
+          {r.name} · {t(r.source)}
+          {r.edited && " · " + t("Edited manually")}
+          {r.synthetic && " · " + t("Sample project")} ·{" "}
+          {new Date(r.created).toLocaleDateString(locale[language])}
+        </small>
+      </button>
+    );
+  }
+
   const creator = (
     <Panel title={t("New project")} icon={<Folder />}>
       <form onSubmit={saveProject}>
@@ -622,7 +706,67 @@ export default function Workspace({
       </form>
     </Panel>
   );
+  const onboarding = (
+    <Panel
+      title={t(sampleMode ? "Live AI demo" : "Try a sample contract")}
+      icon={<FileText />}
+    >
+      <p>
+        {t(
+          sampleMode
+            ? "Use a fictional contract and run a real review with WebLLM on your device. The first run downloads model weights."
+            : "Start with a fictional agreement and a client request. Run your first local analysis when ready.",
+        )}
+      </p>
+      <Button disabled={disabled} onClick={() => void loadSample()}>
+        {t("Load sample contract")}
+      </Button>
+    </Panel>
+  );
+  const statistics = (
+    <div className="ws-stats">
+      {[
+        [
+          t("Projects"),
+          number.format(projects.filter((p) => !p.synthetic).length),
+        ],
+        [t("Saved reviews"), number.format(realReviews.length)],
+        [
+          t("Out-of-scope reviews"),
+          number.format(
+            realReviews.filter((r) => r.status === "out_of_scope").length,
+          ),
+        ],
+        [
+          t("Estimated extra work"),
+          money(realReviews.reduce((sum, r) => sum + extraWork(r), 0)),
+        ],
+      ].map(([label, value]) => (
+        <div key={label}>
+          <span>{label}</span>
+          <strong>{value}</strong>
+        </div>
+      ))}
+    </div>
+  );
   const feedback = activity ?? notice;
+  const modelState =
+    activity && activeAnalysis.current
+      ? "busy"
+      : gpu === null
+        ? "checking"
+        : gpu === false
+          ? "manual"
+          : isModelLoaded()
+            ? "ready"
+            : "idle";
+  const modelLabels = {
+    busy: "Local AI running",
+    checking: "Checking WebGPU",
+    manual: "Manual review only",
+    ready: "AI model loaded",
+    idle: "AI ready to load",
+  } as const;
   const currentReviews = reviews.filter((r) => r.project === selected);
   const projectMatches = projects.filter(
     (p) =>
@@ -642,744 +786,763 @@ export default function Workspace({
       ),
   );
   return (
-    <main
-      className="ws"
-      onInvalidCapture={(event) => {
-        if (!(
-          event.target instanceof HTMLInputElement ||
-          event.target instanceof HTMLTextAreaElement
-        ))
-          return;
-        event.preventDefault();
-        const field = event.target;
-        if (field !== field.form?.querySelector(":invalid")) return;
-        setNotice(undefined);
-        setError(
-          new MessageError(
-            field.validity.valueMissing ? requiredField : invalidNumber,
-          ),
-        );
-        field.focus();
-      }}
-      onInputCapture={() => {
-        if (error?.key === requiredField || error?.key === invalidNumber)
-          setError(undefined);
-      }}
-    >
-      <div className="ws-top">
-        <div>
-          <small>{t("LOCAL WORKSPACE")}</small>
-          <h1>
-            {page === "projects"
-              ? t("Projects")
-              : page === "settings"
-                ? t("Settings")
-                : t("Dashboard")}
-          </h1>
-          <p>
-            {page === "projects"
-              ? t("Manage the agreements behind your reviews.")
-              : page === "settings"
-                ? t("Control your rates and local data.")
-                : t("Check client requests against your agreement.")}
+    <div className="ws-shell">
+      <WorkspaceNavigation page={page} t={t} />
+      <main
+        className="ws"
+        onInvalidCapture={(event) => {
+          if (!(
+            event.target instanceof HTMLInputElement ||
+            event.target instanceof HTMLTextAreaElement
+          ))
+            return;
+          event.preventDefault();
+          const field = event.target;
+          if (field !== field.form?.querySelector(":invalid")) return;
+          setNotice(undefined);
+          setError(
+            new MessageError(
+              field.validity.valueMissing ? requiredField : invalidNumber,
+            ),
+          );
+          field.focus();
+        }}
+        onInputCapture={() => {
+          if (error?.key === requiredField || error?.key === invalidNumber)
+            setError(undefined);
+        }}
+      >
+        <div className="ws-top">
+          <div>
+            <small>{t("LOCAL WORKSPACE")}</small>
+            <h1 ref={heading} tabIndex={-1}>
+              {t(workspaceViews[page].label)}
+            </h1>
+            <p>{t(workspaceViews[page].description)}</p>
+          </div>
+          <div className="ws-badges">
+            <span className="ws-local">
+              <ShieldCheck size={15} /> {t("On this device")}
+            </span>
+            <span
+              className="ws-model"
+              data-state={modelState}
+              aria-live="polite"
+            >
+              <i aria-hidden="true" />
+              {t(modelLabels[modelState])}
+            </span>
+          </div>
+        </div>
+        {error && (
+          <p className="ws-error" role="alert">
+            {t(error.key)}
+            {batchFailed && (
+              <span className="ws-error-detail">
+                {interpolate(
+                  t(
+                    "Batch stopped at request {number}. Saved earlier results. Remaining requests are ready to retry.",
+                  ),
+                  { number: number.format(batchFailed) },
+                )}
+              </span>
+            )}
+            {error.detail && (
+              <span className="ws-error-detail">{error.detail}</span>
+            )}
           </p>
-        </div>
-        <span className="ws-local">
-          <ShieldCheck size={15} /> {t("On this device")}
-        </span>
-      </div>
-      {error && (
-        <p className="ws-error" role="alert">
-          {t(error.key)}
-          {batchFailed && (
-            <span className="ws-error-detail">
-              {interpolate(
-                t(
-                  "Batch stopped at request {number}. Saved earlier results. Remaining requests are ready to retry.",
-                ),
-                { number: number.format(batchFailed) },
-              )}
-            </span>
-          )}
-          {error.detail && (
-            <span className="ws-error-detail">{error.detail}</span>
-          )}
-        </p>
-      )}
-      {activity && activeAnalysis.current && (
-        <Button
-          type="button"
-          variant="ghost"
-          disabled={stopping}
-          onClick={() => {
-            activeAnalysis.current?.abort();
-            setStopping(true);
-            setProgress(undefined);
-            setActivity("Stopping analysis…");
-          }}
-        >
-          {t("Stop analysis")}
-        </Button>
-      )}
-      {feedback && (
-        <p className="ws-notice" role="status">
-          {t(feedback)}
-          {batchStep && (
-            <>
-              {" "}
-              ·{" "}
-              {interpolate(t("Working on request {current} of {total}"), {
-                current: number.format(batchStep.current),
-                total: number.format(batchStep.total),
-              })}
-            </>
-          )}
-          {progress !== undefined && (
-            <span className="ws-progress">
-              <progress
-                aria-label={t("Model download progress")}
-                value={progress}
-                max={1}
-              />
-              {new Intl.NumberFormat(locale[language], {
-                style: "percent",
-              }).format(progress)}
-            </span>
-          )}
-        </p>
-      )}
-      {!ready && !error && <p>{t("Opening workspace…")}</p>}
-      {page === "settings" ? (
-        <div className="ws-grid">
-          <Panel title={t("Review defaults")} icon={<SlidersHorizontal />}>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                void perform("Saving rate…", async () => {
-                  if (!validRate(rate))
-                    throw new MessageError("Enter a valid USD hourly rate.");
-                  const db = await database();
-                  try {
-                    await db.put("settings", Number(rate), "rate");
-                  } finally {
-                    db.close();
-                  }
-                  setNotice("Default rate saved.");
-                });
-              }}
-            >
-              <label>
-                {t("Hourly rate (USD)")}
-                <input
-                  type="number"
-                  min="0"
-                  max="100000"
-                  step=".01"
-                  required
-                  value={rate}
-                  onChange={(e) => setRate(e.target.value)}
-                />
-              </label>
-              <Button disabled={disabled}>{t("Save rate")}</Button>
-            </form>
-            <p>
-              {gpu === null
-                ? t("WebGPU check in progress.")
-                : gpu
-                  ? t("WebGPU available.")
-                  : t("WebGPU unavailable · manual review available.")}
-            </p>
-          </Panel>
-          <Panel title={t("Workspace data")} icon={<Archive />}>
-            <p>
-              {t(
-                "Export all projects, contracts, review history and your saved hourly rate as JSON.",
-              )}
-            </p>
-            <Button
-              disabled={disabled}
-              onClick={() =>
-                void perform("Exporting…", async () => {
-                  const db = await database();
-                  try {
-                    const tx = db.transaction([
-                      "projects",
-                      "reviews",
-                      "settings",
-                    ]);
-                    const [p, r, s] = await Promise.all([
-                      tx.objectStore("projects").getAll(),
-                      tx.objectStore("reviews").getAll(),
-                      tx.objectStore("settings").get("rate"),
-                    ]);
-                    const url = URL.createObjectURL(
-                      new Blob(
-                        [
-                          JSON.stringify(
-                            {
-                              version: 1,
-                              projects: p,
-                              reviews: r,
-                              rate: s ?? 100,
-                            },
-                            null,
-                            2,
-                          ),
-                        ],
-                        { type: "application/json" },
-                      ),
-                    );
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = "scopeguard-workspace.json";
-                    a.click();
-                    setTimeout(() => URL.revokeObjectURL(url), 1000);
-                  } finally {
-                    db.close();
-                  }
-                })
-              }
-            >
-              <Download size={16} /> {t("Export workspace")}
-            </Button>
-            <hr />
-            {confirmDelete ? (
-              <>
-                <p>
-                  {t(
-                    "Delete every saved contract, review and rate from this browser? This is permanent.",
-                  )}
-                </p>
-                <div className="ws-actions">
-                  <Button
-                    disabled={disabled}
-                    onClick={() =>
-                      void perform("Deleting…", async () => {
-                        const db = await database();
-                        try {
-                          const tx = db.transaction(
-                            ["projects", "reviews", "settings"],
-                            "readwrite",
-                          );
-                          await Promise.all([
-                            tx.objectStore("projects").clear(),
-                            tx.objectStore("reviews").clear(),
-                            tx.objectStore("settings").clear(),
-                            tx.done,
-                          ]);
-                        } finally {
-                          db.close();
-                        }
-                        setProjects([]);
-                        setReviews([]);
-                        setChats({});
-                        setQuestion("");
-                        setEditFinding(undefined);
-                        setBatchFailed(undefined);
-                        setRetryReview(false);
-                        select("");
-                        setDetail(undefined);
-                        setRequest("");
-                        setExcerpt("");
-                        setDraft("");
-                        setContract("");
-                        setName("");
-                        setManual({ ...blankReview });
-                        setRate("100");
-                        setConfirmDelete(false);
-                        setNotice("Workspace data deleted.");
-                      })
-                    }
-                  >
-                    {t("Confirm deletion")}
-                  </Button>
-                  <button
-                    disabled={disabled}
-                    onClick={() => setConfirmDelete(false)}
-                  >
-                    {t("Cancel")}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <button
-                disabled={disabled}
-                className="ws-danger"
-                onClick={() => setConfirmDelete(true)}
-              >
-                {t("Delete workspace data")}
-              </button>
-            )}
-          </Panel>
-        </div>
-      ) : page === "projects" ? (
-        <div className="ws-grid">
-          {creator}
-          <Panel
-            title={t("Saved projects") + " · " + projects.length}
-            icon={<Layers />}
+        )}
+        {activity && activeAnalysis.current && (
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={stopping}
+            onClick={() => {
+              activeAnalysis.current?.abort();
+              setStopping(true);
+              setProgress(undefined);
+              setActivity("Stopping analysis…");
+            }}
           >
-            {!projects.length && (
-              <p>{t("Your saved agreements will appear here.")}</p>
+            {t("Stop analysis")}
+          </Button>
+        )}
+        {feedback && (
+          <p className="ws-notice" role="status">
+            {t(feedback)}
+            {batchStep && (
+              <>
+                {" "}
+                ·{" "}
+                {interpolate(t("Working on request {current} of {total}"), {
+                  current: number.format(batchStep.current),
+                  total: number.format(batchStep.total),
+                })}
+              </>
             )}
-            <label>
-              {t("Search projects")}
-              <input
-                type="search"
-                value={projectQuery}
-                onChange={(e) => setProjectQuery(e.target.value)}
-              />
-            </label>
-            {statusFilter(projectStatus, setProjectStatus)}
-            {projects.length > 0 && projectMatches.length === 0 && (
-              <p>{t("No matching projects.")}</p>
+            {progress !== undefined && (
+              <span className="ws-progress">
+                <progress
+                  aria-label={t("Model download progress")}
+                  value={progress}
+                  max={1}
+                />
+                {new Intl.NumberFormat(locale[language], {
+                  style: "percent",
+                }).format(progress)}
+              </span>
             )}
-            {projectMatches.map((p) => (
-              <details key={p.id}>
-                <summary>
-                  {p.name}
-                  {p.synthetic && " · " + t("Sample project")}
-                </summary>
-                <small>
-                  {t("Saved reviews")} ·{" "}
-                  {reviews.filter((r) => r.project === p.id).length}
-                </small>
-                <pre>{p.contract}</pre>
-                <Button
-                  disabled={disabled}
-                  onClick={() => {
-                    choose(p);
-                    location.hash = "dashboard";
-                  }}
-                >
-                  {t("Review request")}
-                </Button>
-              </details>
-            ))}
-          </Panel>
-        </div>
-      ) : (
-        <>
-          {ready && (sampleMode || !projects.length) && (
-            <Panel
-              title={t(sampleMode ? "Live AI demo" : "Try a sample contract")}
-              icon={<FileText />}
-            >
+          </p>
+        )}
+        {!ready && !error && <p>{t("Opening workspace…")}</p>}
+
+        {ready && page === "settings" && (
+          <div className="ws-grid">
+            <Panel title={t("Review defaults")} icon={<SlidersHorizontal />}>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void perform("Saving rate…", async () => {
+                    if (!validRate(rate))
+                      throw new MessageError("Enter a valid USD hourly rate.");
+                    const db = await database();
+                    try {
+                      await db.put("settings", Number(rate), "rate");
+                    } finally {
+                      db.close();
+                    }
+                    setNotice("Default rate saved.");
+                  });
+                }}
+              >
+                <label>
+                  {t("Hourly rate (USD)")}
+                  <input
+                    type="number"
+                    min="0"
+                    max="100000"
+                    step=".01"
+                    required
+                    value={rate}
+                    onChange={(e) => setRate(e.target.value)}
+                  />
+                </label>
+                <Button disabled={disabled}>{t("Save rate")}</Button>
+              </form>
+              <p>
+                {gpu === null
+                  ? t("WebGPU check in progress.")
+                  : gpu
+                    ? t("WebGPU available.")
+                    : t("WebGPU unavailable · manual review available.")}
+              </p>
+            </Panel>
+            <Panel title={t("Workspace data")} icon={<Archive />}>
               <p>
                 {t(
-                  sampleMode
-                    ? "Use a fictional contract and run a real review with WebLLM on your device. The first run downloads model weights."
-                    : "Start with a fictional agreement and a client request. Run your first local analysis when ready.",
+                  "Export all projects, contracts, review history and your saved hourly rate as JSON.",
                 )}
               </p>
-              <Button disabled={disabled} onClick={() => void loadSample()}>
-                {t("Load sample contract")}
+              <Button
+                disabled={disabled}
+                onClick={() =>
+                  void perform("Exporting…", async () => {
+                    const db = await database();
+                    try {
+                      const tx = db.transaction([
+                        "projects",
+                        "reviews",
+                        "settings",
+                      ]);
+                      const [p, r, s] = await Promise.all([
+                        tx.objectStore("projects").getAll(),
+                        tx.objectStore("reviews").getAll(),
+                        tx.objectStore("settings").get("rate"),
+                      ]);
+                      const url = URL.createObjectURL(
+                        new Blob(
+                          [
+                            JSON.stringify(
+                              {
+                                version: 1,
+                                projects: p,
+                                reviews: r,
+                                rate: s ?? 100,
+                              },
+                              null,
+                              2,
+                            ),
+                          ],
+                          { type: "application/json" },
+                        ),
+                      );
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = "scopeguard-workspace.json";
+                      a.click();
+                      setTimeout(() => URL.revokeObjectURL(url), 1000);
+                    } finally {
+                      db.close();
+                    }
+                  })
+                }
+              >
+                <Download size={16} /> {t("Export workspace")}
               </Button>
-            </Panel>
-          )}
-          <div className="ws-stats">
-            {[
-              [
-                t("Projects"),
-                number.format(projects.filter((p) => !p.synthetic).length),
-              ],
-              [t("Saved reviews"), number.format(realReviews.length)],
-              [
-                t("Out-of-scope reviews"),
-                number.format(
-                  realReviews.filter((r) => r.status === "out_of_scope").length,
-                ),
-              ],
-              [
-                t("Estimated extra work"),
-                money(realReviews.reduce((sum, r) => sum + extraWork(r), 0)),
-              ],
-            ].map(([label, value]) => (
-              <div key={label}>
-                <span>{label}</span>
-                <strong>{value}</strong>
-              </div>
-            ))}
-          </div>
-          <div className="ws-grid">
-            <Panel title={t("Estimated revenue trend")} icon={<ScanLine />}>
-              <p>
-                {t(
-                  "Out-of-scope estimates from saved reviews. Sample projects are excluded.",
-                )}
-              </p>
-              <RevenueTrend
-                reviews={realReviews}
-                language={language}
-                t={t}
-                money={money}
-              />
-            </Panel>
-            <Panel title={t("Estimated revenue by project")} icon={<Layers />}>
-              <p>{t("Top five projects by estimated extra work.")}</p>
-              <RevenueByProject reviews={realReviews} t={t} money={money} />
-            </Panel>
-          </div>
-          <div className="ws-grid">
-            <div>
-              {!project || editing ? (
+              <hr />
+              {confirmDelete ? (
                 <>
-                  {creator}
-                  {project && (
+                  <p>
+                    {t(
+                      "Delete every saved contract, review and rate from this browser? This is permanent.",
+                    )}
+                  </p>
+                  <div className="ws-actions">
+                    <Button
+                      disabled={disabled}
+                      onClick={() =>
+                        void perform("Deleting…", async () => {
+                          const db = await database();
+                          try {
+                            const tx = db.transaction(
+                              ["projects", "reviews", "settings"],
+                              "readwrite",
+                            );
+                            await Promise.all([
+                              tx.objectStore("projects").clear(),
+                              tx.objectStore("reviews").clear(),
+                              tx.objectStore("settings").clear(),
+                              tx.done,
+                            ]);
+                          } finally {
+                            db.close();
+                          }
+                          setProjects([]);
+                          setReviews([]);
+                          setChats({});
+                          setQuestion("");
+                          setEditFinding(undefined);
+                          setBatchFailed(undefined);
+                          setRetryReview(false);
+                          select("");
+                          setDetail(undefined);
+                          setRequest("");
+                          setExcerpt("");
+                          setDraft("");
+                          setContract("");
+                          setName("");
+                          setManual({ ...blankReview });
+                          setRate("100");
+                          setConfirmDelete(false);
+                          setNotice("Workspace data deleted.");
+                        })
+                      }
+                    >
+                      {t("Confirm deletion")}
+                    </Button>
                     <button
                       disabled={disabled}
-                      onClick={() => setEditing(false)}
+                      onClick={() => setConfirmDelete(false)}
                     >
-                      {t("Cancel new project")}
+                      {t("Cancel")}
                     </button>
-                  )}
+                  </div>
                 </>
               ) : (
-                <Panel title={t("Review a request")} icon={<ScanLine />}>
-                  {project.synthetic && <p>{t("Sample project")}</p>}
-                  <form onSubmit={saveReview}>
-                    <fieldset disabled={disabled}>
-                      <label>
-                        {t("Project")}
-                        <select
-                          value={selected}
-                          onChange={(e) =>
-                            choose(
-                              projects.find((p) => p.id === e.target.value)!,
-                            )
-                          }
-                        >
-                          {projects.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <details>
-                        <summary>{t("View contract")}</summary>
-                        <pre>{project.contract}</pre>
-                      </details>
-                      <label>
-                        {t(
-                          mode === "batch"
-                            ? "One client request per line (up to 10)."
-                            : "Client request",
-                        )}
-                        <textarea
-                          required
-                          rows={mode === "batch" ? 6 : 3}
-                          value={request}
-                          onChange={(e) => setRequest(e.target.value)}
-                          placeholder={t("Paste the client’s request…")}
-                        />
-                      </label>
-                      <label>
-                        {t("Review method")}
-                        <select
-                          value={mode}
-                          onChange={(e) =>
-                            setMode(e.target.value as typeof mode)
-                          }
-                        >
-                          <option value="manual">{t("Manual review")}</option>
-                          <option value="batch" disabled={!gpu}>
-                            {t("Batch review")}
-                          </option>
-                          <option value="ai" disabled={!gpu}>
-                            {t("Local AI")}
-                            {gpu ? "" : " · " + t("WebGPU unavailable")}
-                          </option>
-                        </select>
-                      </label>
-                      {mode === "manual" ? (
-                        resultFields(manual, setManual)
-                      ) : (
-                        <>
-                          <p>
+                <button
+                  disabled={disabled}
+                  className="ws-danger"
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  {t("Delete workspace data")}
+                </button>
+              )}
+            </Panel>
+          </div>
+        )}
+        {ready && page === "projects" && (
+          <div className="ws-grid">
+            {creator}
+            <Panel
+              title={t("Saved projects") + " · " + projects.length}
+              icon={<Layers />}
+            >
+              {!projects.length && (
+                <p>{t("Your saved agreements will appear here.")}</p>
+              )}
+              <label>
+                {t("Search projects")}
+                <input
+                  type="search"
+                  value={projectQuery}
+                  onChange={(e) => setProjectQuery(e.target.value)}
+                />
+              </label>
+              {statusFilter(projectStatus, setProjectStatus)}
+              {projects.length > 0 && projectMatches.length === 0 && (
+                <p>{t("No matching projects.")}</p>
+              )}
+              {projectMatches.map((p) => (
+                <details key={p.id}>
+                  <summary>
+                    {p.name}
+                    {p.synthetic && " · " + t("Sample project")}
+                  </summary>
+                  <small>
+                    {t("Saved reviews")} ·{" "}
+                    {reviews.filter((r) => r.project === p.id).length}
+                  </small>
+                  <pre>{p.contract}</pre>
+                  <Button
+                    disabled={disabled}
+                    onClick={() => {
+                      choose(p);
+                      location.hash = "analysis";
+                    }}
+                  >
+                    {t("Review request")}
+                  </Button>
+                </details>
+              ))}
+            </Panel>
+          </div>
+        )}
+        {ready && page === "dashboard" && (
+          <>
+            {!projects.length && onboarding}
+            {statistics}
+            <Panel title={t("Recent reviews")} icon={<History />}>
+              <div className="ws-actions">
+                <a href="#projects" className="sg-button sg-outline">
+                  {t("Projects")}
+                </a>
+                <a href="#analysis" className="sg-button sg-solid">
+                  {t("Start analysis")}
+                </a>
+              </div>
+              {reviews.length ? (
+                reviews.slice(0, 5).map(historyItem)
+              ) : (
+                <p>{t("Start a review to build your history.")}</p>
+              )}
+            </Panel>
+          </>
+        )}
+        {ready && page === "analytics" && (
+          <>
+            {statistics}
+            <div className="ws-grid">
+              <Panel title={t("Estimated revenue trend")} icon={<ScanLine />}>
+                <p>
+                  {t(
+                    "Out-of-scope estimates from saved reviews. Sample projects are excluded.",
+                  )}
+                </p>
+                <RevenueTrend
+                  reviews={realReviews}
+                  language={language}
+                  t={t}
+                  money={money}
+                />
+              </Panel>
+              <Panel
+                title={t("Estimated revenue by project")}
+                icon={<Layers />}
+              >
+                <p>{t("Top five projects by estimated extra work.")}</p>
+                <RevenueByProject reviews={realReviews} t={t} money={money} />
+              </Panel>
+            </div>
+          </>
+        )}
+        {ready && page === "analysis" && (
+          <>
+            {sampleMode && onboarding}
+            {!project ? (
+              <Panel title={t("New project")} icon={<Folder />}>
+                <p>
+                  {t("Choose or create a project before starting a review.")}
+                </p>
+                <a className="sg-button sg-solid" href="#projects">
+                  {t("Create project")}
+                </a>
+                {!sampleMode && (
+                  <a className="ws-inline-link" href="#demo">
+                    {t("Try the AI demo")}
+                  </a>
+                )}
+              </Panel>
+            ) : (
+              <>
+                {projectPicker}
+                <div className="ws-grid ws-analysis">
+                  <div className="ws-contract-column">
+                    <Panel title={t("View contract")} icon={<FileText />}>
+                      {detail?.evidence && (
+                        <p>
+                          {t("Evidence is highlighted in the saved contract.")}
+                        </p>
+                      )}
+                      <ContractText
+                        contract={detail?.contract ?? project.contract}
+                        evidence={detail?.evidence}
+                      />
+                    </Panel>
+                  </div>
+                  <div className="ws-analysis-content">
+                    <Panel title={t("Review a request")} icon={<ScanLine />}>
+                      {project.synthetic && <p>{t("Sample project")}</p>}
+                      <form onSubmit={saveReview}>
+                        <fieldset disabled={disabled}>
+                          <label>
                             {t(
-                              "The initial model download can take several minutes or longer. Keep this tab open. Later runs reuse cached files.",
+                              mode === "batch"
+                                ? "One client request per line (up to 10)."
+                                : "Client request",
+                            )}
+                            <textarea
+                              required
+                              rows={mode === "batch" ? 6 : 3}
+                              value={request}
+                              onChange={(e) => setRequest(e.target.value)}
+                              placeholder={t("Paste the client’s request…")}
+                            />
+                          </label>
+                          <label>
+                            {t("Review method")}
+                            <select
+                              value={mode}
+                              onChange={(e) =>
+                                setMode(e.target.value as typeof mode)
+                              }
+                            >
+                              <option value="manual">
+                                {t("Manual review")}
+                              </option>
+                              <option value="batch" disabled={!gpu}>
+                                {t("Batch review")}
+                              </option>
+                              <option value="ai" disabled={!gpu}>
+                                {t("Local AI")}
+                                {gpu ? "" : " · " + t("WebGPU unavailable")}
+                              </option>
+                            </select>
+                          </label>
+                          {mode === "manual" ? (
+                            resultFields(manual, setManual)
+                          ) : (
+                            <>
+                              <p>
+                                {t(
+                                  "The initial model download can take several minutes or longer. Keep this tab open. Later runs reuse cached files.",
+                                )}
+                              </p>
+                              {excerptField}
+                            </>
+                          )}
+                          {rateField(rate, setRate)}
+                          <div className="ws-actions">
+                            <Button
+                              disabled={
+                                !validRate(rate) || (mode !== "manual" && !gpu)
+                              }
+                            >
+                              {mode !== "manual" ? (
+                                <ScanLine size={16} />
+                              ) : (
+                                <Check size={16} />
+                              )}{" "}
+                              {t(
+                                mode === "manual"
+                                  ? "Save manual review"
+                                  : retryReview
+                                    ? "Retry local analysis"
+                                    : mode === "batch"
+                                      ? "Analyze batch"
+                                      : "Analyze locally",
+                              )}
+                            </Button>
+                            {retryReview && mode !== "manual" && (
+                              <button
+                                type="button"
+                                onClick={() => setMode("manual")}
+                              >
+                                {t("Switch to manual review")}
+                              </button>
+                            )}
+                          </div>
+                        </fieldset>
+                      </form>
+                    </Panel>
+                    <div
+                      ref={findingAnchor}
+                      tabIndex={-1}
+                      className="ws-finding-anchor"
+                    >
+                      {detail ? (
+                        <Panel
+                          title={t(statuses[detail.status])}
+                          icon={<FileText />}
+                        >
+                          <small>
+                            {t(detail.source)} · {detail.name}
+                            {detail.synthetic && " · " + t("Sample project")}
+                            {detail.edited && " · " + t("Edited manually")}
+                          </small>
+                          <p>{detail.request}</p>
+                          {detail.evidence && (
+                            <blockquote>{detail.evidence}</blockquote>
+                          )}
+                          <p lang={detail.reasoningLanguage}>
+                            {detail.reasoning}
+                          </p>
+                          <b>
+                            {number.format(detail.hours)} {t("h")} ×{" "}
+                            {money(detail.rate)} / {t("h")} ={" "}
+                            {money(revenue(detail.hours, detail.rate))}
+                          </b>
+                          <p>
+                            {t("Estimated extra work")} ·{" "}
+                            {money(
+                              detail.status === "out_of_scope"
+                                ? revenue(detail.hours, detail.rate)
+                                : 0,
                             )}
                           </p>
-                          <details>
-                            <summary>{t("Review a contract excerpt")}</summary>
-                            <label>
-                              {t("Exact excerpt (optional)")}
-                              <textarea
-                                rows={4}
-                                value={excerpt}
-                                onChange={(e) => setExcerpt(e.target.value)}
-                                placeholder={t(
-                                  "Copy relevant clauses from the contract above.",
+
+                          {!editFinding && (
+                            <Button
+                              variant="ghost"
+                              disabled={disabled}
+                              onClick={() =>
+                                setEditFinding({
+                                  result: detail,
+                                  rate: String(detail.rate),
+                                })
+                              }
+                            >
+                              {t("Edit findings")}
+                            </Button>
+                          )}
+                          {editFinding ? (
+                            <form onSubmit={saveFinding}>
+                              <fieldset disabled={disabled}>
+                                {resultFields(editFinding.result, (value) =>
+                                  setEditFinding({
+                                    ...editFinding,
+                                    result: value,
+                                  }),
                                 )}
-                              />
-                            </label>
-                          </details>
+                                {rateField(editFinding.rate, (value) =>
+                                  setEditFinding({
+                                    ...editFinding,
+                                    rate: value,
+                                  }),
+                                )}
+                                <div className="ws-actions">
+                                  <Button>{t("Save changes")}</Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    onClick={() => setEditFinding(undefined)}
+                                  >
+                                    {t("Cancel")}
+                                  </Button>
+                                </div>
+                              </fieldset>
+                            </form>
+                          ) : !draft ? (
+                            <Button onClick={() => setDraft(email(detail))}>
+                              {t("Generate client email")}
+                            </Button>
+                          ) : (
+                            <>
+                              <label>
+                                {t("Email draft")}
+                                <textarea
+                                  rows={9}
+                                  value={draft}
+                                  onChange={(e) => setDraft(e.target.value)}
+                                />
+                              </label>
+                              <Button
+                                onClick={() =>
+                                  void perform("Copying…", async () => {
+                                    await navigator.clipboard.writeText(draft);
+                                    setNotice("Email copied.");
+                                  })
+                                }
+                              >
+                                <Clipboard size={16} /> {t("Copy email")}
+                              </Button>
+                            </>
+                          )}
+                        </Panel>
+                      ) : (
+                        <Panel
+                          title={t("Contract and findings")}
+                          icon={<FileText />}
+                        >
+                          <p>
+                            {t(
+                              "Select a review to see its findings and evidence.",
+                            )}
+                          </p>
+                        </Panel>
+                      )}
+                    </div>
+                    <Panel title={t("Review history")} icon={<History />}>
+                      <a className="ws-inline-link" href="#reports">
+                        {t("Open reports")}
+                      </a>
+                      {currentReviews.length > 0 && (
+                        <>
+                          <label>
+                            {t("Search review history")}
+                            <input
+                              type="search"
+                              value={historyQuery}
+                              onChange={(e) => setHistoryQuery(e.target.value)}
+                            />
+                          </label>
+                          {statusFilter(historyStatus, setHistoryStatus)}
                         </>
                       )}
-                      {rateField(rate, setRate)}
-                      <div className="ws-actions">
-                        <Button
-                          disabled={
-                            !validRate(rate) || (mode !== "manual" && !gpu)
-                          }
-                        >
-                          {mode !== "manual" ? (
-                            <ScanLine size={16} />
-                          ) : (
-                            <Check size={16} />
-                          )}{" "}
+                      {currentReviews.length === 0 ? (
+                        <p>
                           {t(
-                            mode === "manual"
-                              ? "Save manual review"
-                              : retryReview
-                                ? "Retry local analysis"
-                                : mode === "batch"
-                                  ? "Analyze batch"
-                                  : "Analyze locally",
+                            "Saved reviews for this project will appear here.",
                           )}
-                        </Button>
-                        {retryReview && mode !== "manual" && (
-                          <button
+                        </p>
+                      ) : historyMatches.length === 0 ? (
+                        <p>{t("No matching reviews.")}</p>
+                      ) : (
+                        historyMatches.map(historyItem)
+                      )}
+                    </Panel>
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        )}
+        {ready &&
+          page === "chat" &&
+          (project ? (
+            <>
+              {projectPicker}
+              <div className="ws-grid ws-analysis">
+                <div className="ws-contract-column">
+                  <Panel title={t("View contract")} icon={<FileText />}>
+                    <ContractText
+                      contract={project.contract}
+                      evidence={turns.at(-1)?.answer.evidence}
+                    />
+                  </Panel>
+                </div>
+                <Panel title={t("Contract chat")} icon={<ScanLine />}>
+                  <p>
+                    {t(
+                      "Ask about the selected contract. The local model must cite a clause for supported answers.",
+                    )}
+                  </p>
+                  {gpu === false && (
+                    <p>{t("WebGPU is unavailable. Use manual review.")}</p>
+                  )}
+                  {turns.length > 0 && (
+                    <ol className="ws-chat" aria-live="polite">
+                      {turns.map((turn, index) => (
+                        <li key={index}>
+                          <b>{turn.question}</b>
+                          <p>
+                            {turn.answer.evidence
+                              ? turn.answer.reasoning
+                              : t(
+                                  "No supporting clause was verified for this answer.",
+                                )}
+                          </p>
+                          {turn.answer.evidence && (
+                            <blockquote>{turn.answer.evidence}</blockquote>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                  <form onSubmit={askContract}>
+                    <fieldset disabled={disabled || !gpu}>
+                      {excerptField}
+                      <label>
+                        {t("Question about this contract")}
+                        <textarea
+                          required
+                          rows={2}
+                          maxLength={1500}
+                          value={question}
+                          onChange={(e) => setQuestion(e.target.value)}
+                        />
+                      </label>
+                      <div className="ws-actions">
+                        <Button>{t("Ask locally")}</Button>
+                        {turns.length > 0 && (
+                          <Button
                             type="button"
-                            onClick={() => setMode("manual")}
+                            variant="ghost"
+                            onClick={() =>
+                              setChats((all) => ({ ...all, [selected]: [] }))
+                            }
                           >
-                            {t("Switch to manual review")}
-                          </button>
+                            {t("Clear chat")}
+                          </Button>
                         )}
-                        <button type="button" onClick={() => setEditing(true)}>
-                          {t("New project")}
-                        </button>
                       </div>
                     </fieldset>
                   </form>
                 </Panel>
-              )}
-            </div>
-            <div>
-              <Panel title={t("Review history")} icon={<History />}>
-                {project && (
-                  <div className="ws-actions">
-                    <Button
-                      disabled={!currentReviews.length || disabled}
-                      onClick={() => exportCsv(currentReviews, t, language)}
-                    >
-                      {t("Export CSV")}
-                    </Button>
-                    <Button
-                      disabled={!currentReviews.length || disabled}
-                      onClick={() => window.print()}
-                    >
-                      {t("Print / Save PDF")}
-                    </Button>
-                  </div>
-                )}
-                {currentReviews.length > 0 && (
-                  <>
-                    <label>
-                      {t("Search review history")}
-                      <input
-                        type="search"
-                        value={historyQuery}
-                        onChange={(e) => setHistoryQuery(e.target.value)}
-                      />
-                    </label>
-                    {statusFilter(historyStatus, setHistoryStatus)}
-                  </>
-                )}
-                {currentReviews.length === 0 ? (
-                  <p>{t("Saved reviews for this project will appear here.")}</p>
-                ) : historyMatches.length === 0 ? (
-                  <p>{t("No matching reviews.")}</p>
-                ) : (
-                  historyMatches.map((r) => (
-                    <button
-                      disabled={disabled}
-                      className="ws-history"
-                      key={r.id}
-                      aria-current={detail?.id === r.id}
-                      onClick={() => openReview(r)}
-                    >
-                      <b>{t(statuses[r.status])}</b>
-                      <span>{r.request}</span>
-                      <small>
-                        {t(r.source)}
-                        {r.edited && " · " + t("Edited manually")}
-                        {r.synthetic && " · " + t("Sample project")} ·{" "}
-                        {new Date(r.created).toLocaleDateString(
-                          locale[language],
-                        )}
-                      </small>
-                    </button>
-                  ))
-                )}
-              </Panel>
-            </div>
-          </div>
-          {project && !editing && (
+              </div>
+            </>
+          ) : (
+            missingProject
+          ))}
+        {ready &&
+          page === "reports" &&
+          (project ? (
             <>
-              <div className="ws-grid ws-findings">
-                <Panel title={t("View contract")} icon={<FileText />}>
-                  {detail?.evidence && (
-                    <p>{t("Evidence is highlighted in the saved contract.")}</p>
-                  )}
-                  <ContractText
-                    contract={detail?.contract ?? project.contract}
-                    evidence={detail?.evidence}
-                  />
-                </Panel>
-                {detail ? (
-                  <Panel title={t(statuses[detail.status])} icon={<FileText />}>
-                    <small>
-                      {t(detail.source)} · {detail.name}
-                      {detail.synthetic && " · " + t("Sample project")}
-                      {detail.edited && " · " + t("Edited manually")}
-                    </small>
-                    <p>{detail.request}</p>
-                    {detail.evidence && (
-                      <blockquote>{detail.evidence}</blockquote>
-                    )}
-                    <p lang={detail.reasoningLanguage}>{detail.reasoning}</p>
-                    <b>
-                      {number.format(detail.hours)} {t("h")} ×{" "}
-                      {money(detail.rate)} / {t("h")} ={" "}
-                      {money(revenue(detail.hours, detail.rate))}
-                    </b>
+              {projectPicker}
+              <Panel title={t("Findings report")} icon={<FileText />}>
+                <p>{t("Choose a project to export its saved findings.")}</p>
+                {!currentReviews.length ? (
+                  <p>{t("No saved findings for this project yet.")}</p>
+                ) : (
+                  <>
                     <p>
+                      {t("Saved reviews")} ·{" "}
+                      {number.format(currentReviews.length)}
+                      <br />
                       {t("Estimated extra work")} ·{" "}
                       {money(
-                        detail.status === "out_of_scope"
-                          ? revenue(detail.hours, detail.rate)
-                          : 0,
+                        currentReviews.reduce(
+                          (sum, r) => sum + extraWork(r),
+                          0,
+                        ),
                       )}
                     </p>
-
-                    {!editFinding && (
-                      <Button
-                        variant="ghost"
-                        disabled={disabled}
-                        onClick={() =>
-                          setEditFinding({
-                            result: detail,
-                            rate: String(detail.rate),
-                          })
-                        }
-                      >
-                        {t("Edit findings")}
-                      </Button>
-                    )}
-                    {editFinding ? (
-                      <form onSubmit={saveFinding}>
-                        <fieldset disabled={disabled}>
-                          {resultFields(editFinding.result, (value) =>
-                            setEditFinding({ ...editFinding, result: value }),
-                          )}
-                          {rateField(editFinding.rate, (value) =>
-                            setEditFinding({ ...editFinding, rate: value }),
-                          )}
-                          <div className="ws-actions">
-                            <Button>{t("Save changes")}</Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              onClick={() => setEditFinding(undefined)}
-                            >
-                              {t("Cancel")}
-                            </Button>
-                          </div>
-                        </fieldset>
-                      </form>
-                    ) : !draft ? (
-                      <Button onClick={() => setDraft(email(detail))}>
-                        {t("Generate client email")}
-                      </Button>
-                    ) : (
-                      <>
-                        <label>
-                          {t("Email draft")}
-                          <textarea
-                            rows={9}
-                            value={draft}
-                            onChange={(e) => setDraft(e.target.value)}
-                          />
-                        </label>
-                        <Button
-                          onClick={() =>
-                            void perform("Copying…", async () => {
-                              await navigator.clipboard.writeText(draft);
-                              setNotice("Email copied.");
-                            })
-                          }
-                        >
-                          <Clipboard size={16} /> {t("Copy email")}
-                        </Button>
-                      </>
-                    )}
-                  </Panel>
-                ) : (
-                  <Panel title={t("Contract and findings")} icon={<FileText />}>
-                    <p>
-                      {t("Select a review to see its findings and evidence.")}
-                    </p>
-                  </Panel>
-                )}
-              </div>
-              <Panel title={t("Contract chat")} icon={<ScanLine />}>
-                <p>
-                  {t(
-                    "Ask about the selected contract. The local model must cite a clause for supported answers.",
-                  )}
-                </p>
-                {!gpu && (
-                  <p>{t("WebGPU is unavailable. Use manual review.")}</p>
-                )}
-                {turns.length > 0 && (
-                  <ol className="ws-chat" aria-live="polite">
-                    {turns.map((turn, index) => (
-                      <li key={index}>
-                        <b>{turn.question}</b>
-                        <p>
-                          {turn.answer.evidence
-                            ? turn.answer.reasoning
-                            : t(
-                                "No supporting clause was verified for this answer.",
-                              )}
-                        </p>
-                        {turn.answer.evidence && (
-                          <blockquote>{turn.answer.evidence}</blockquote>
-                        )}
-                      </li>
-                    ))}
-                  </ol>
-                )}
-                <form onSubmit={askContract}>
-                  <fieldset disabled={disabled || !gpu}>
-                    <label>
-                      {t("Question about this contract")}
-                      <textarea
-                        required
-                        rows={2}
-                        maxLength={1500}
-                        value={question}
-                        onChange={(e) => setQuestion(e.target.value)}
-                      />
-                    </label>
                     <div className="ws-actions">
-                      <Button>{t("Ask locally")}</Button>
-                      {turns.length > 0 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={() =>
-                            setChats((all) => ({ ...all, [selected]: [] }))
-                          }
-                        >
-                          {t("Clear chat")}
-                        </Button>
-                      )}
+                      <Button
+                        disabled={disabled}
+                        onClick={() => exportCsv(currentReviews, t, language)}
+                      >
+                        {t("Export CSV")}
+                      </Button>
+                      <Button
+                        disabled={disabled}
+                        onClick={() => window.print()}
+                      >
+                        {t("Print / Save PDF")}
+                      </Button>
                     </div>
-                  </fieldset>
-                </form>
+                    {currentReviews.map(historyItem)}
+                  </>
+                )}
               </Panel>
               <FindingsReport
                 reviews={currentReviews}
@@ -1389,9 +1552,10 @@ export default function Workspace({
                 money={money}
               />
             </>
-          )}
-        </>
-      )}
-    </main>
+          ) : (
+            missingProject
+          ))}
+      </main>
+    </div>
   );
 }

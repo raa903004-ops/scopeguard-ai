@@ -176,6 +176,7 @@ const schema = {
 };
 
 let engine: MLCEngine | undefined;
+export const isModelLoaded = () => engine !== undefined;
 let working = false;
 export async function analyze(
   contract: string,
