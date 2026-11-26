@@ -293,3 +293,27 @@ test("upgrading a v1 workspace adds only the project chat store", () => {
     ["projects", "reviews", "settings", "chat"],
   );
 });
+test("chat can recover a clause only when its answer is the exact clause", () => {
+  const clause = "The hourly rate is USD 100.";
+  const citations = [clause];
+  assert.equal(
+    groundedResult(
+      { clause: 0, reasoning: clause },
+      citations,
+      clause,
+      "en",
+      true,
+    ).evidence,
+    clause,
+  );
+  assert.equal(
+    groundedResult(
+      { clause: 0, reasoning: "The hourly rate is USD 110." },
+      citations,
+      clause,
+      "en",
+      true,
+    ).evidence,
+    "",
+  );
+});
