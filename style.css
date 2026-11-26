@@ -254,3 +254,22 @@ button:disabled {
     scroll-behavior: auto !important;
   }
 }
+
+.language-switch {
+  appearance: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.3rem 0.35rem;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 0.8rem;
+  flex: none;
+}
+html.dark {
+  color-scheme: dark;
+}
+@media (max-width: 400px) {
+  .head-actions > .nav-cta {
+    display: none;
+  }
+}

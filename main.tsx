@@ -14,13 +14,15 @@ import "./style.css";
 import Landing from "./Landing";
 import Workspace from "./Workspace";
 import { Button } from "./button";
+import { translate, type Language } from "./i18n";
 const routes = ["dashboard", "projects", "settings", "pricing"];
 function current() {
   return location.hash.slice(1).toLowerCase();
 }
-function Brand() {
+function Brand({ language }: { language: Language }) {
+  const t = translate(language);
   return (
-    <a className="brand" href="#home" aria-label="ScopeGuard AI home">
+    <a className="brand" href="#home" aria-label={t("ScopeGuard AI home")}>
       <span className="brand-icon">
         <ShieldCheck size={23} />
       </span>
@@ -28,30 +30,33 @@ function Brand() {
     </a>
   );
 }
-function Pricing() {
+function Pricing({ language }: { language: Language }) {
+  const t = translate(language);
   return (
     <main className="pricing">
       <div className="price-heading">
-        <span className="eyeline">PRICING</span>
+        <span className="eyeline">{t("PRICING")}</span>
         <h1>
-          One workspace.
+          {t("One workspace.")}
           <br />
-          Zero subscription.
+          {t("Zero subscription.")}
         </h1>
-        <p>Review contracts privately with the free early access edition.</p>
+        <p>
+          {t("Review contracts privately with the free early access edition.")}
+        </p>
       </div>
       <section className="price-card">
         <LockKeyhole />
-        <h2>Local workspace</h2>
+        <h2>{t("Local workspace")}</h2>
         <div className="price">
-          $0 <small>/ month</small>
+          $0 <small>{t("/ month")}</small>
         </div>
         <ul>
           {[
-            "Unlimited local projects",
-            "On-device AI and manual review",
-            "Exact contract evidence",
-            "Client email drafts and JSON export",
+            t("Unlimited local projects"),
+            t("On-device AI and manual review"),
+            t("Exact contract evidence"),
+            t("Client email drafts and JSON export"),
           ].map((f) => (
             <li key={f}>
               <Check size={16} />
@@ -60,13 +65,38 @@ function Pricing() {
           ))}
         </ul>
         <a href="#dashboard" className="nav-cta">
-          Get early access
+          {t("Get early access")}
         </a>
       </section>
     </main>
   );
 }
 function App() {
+  const [language, setLanguage] = useState<Language>(() => {
+    try {
+      return localStorage.getItem("sg-language") === "ru" ? "ru" : "en";
+    } catch {
+      return "en";
+    }
+  });
+  const t = translate(language);
+  useEffect(() => {
+    document.documentElement.lang = language;
+    document.title = t("ScopeGuard AI · Contract review");
+    document
+      .querySelector('meta[name="description"]')
+      ?.setAttribute(
+        "content",
+        t(
+          "Review client requests against your contracts and estimate unbilled work privately in your browser.",
+        ),
+      );
+    try {
+      localStorage.setItem("sg-language", language);
+    } catch {
+      // The selection still applies for this session.
+    }
+  }, [language, t]);
   const [page, setPage] = useState(current),
     [menu, setMenu] = useState(false),
     [dark, setDark] = useState(() => {
@@ -95,16 +125,23 @@ function App() {
     }
   }, [dark]);
   const work = routes.slice(0, 3).includes(page);
-  const links = work
+  const labels = {
+    home: t("Overview"),
+    dashboard: t("Dashboard"),
+    projects: t("Projects"),
+    settings: t("Settings"),
+    pricing: t("Pricing"),
+  };
+  const links: (keyof typeof labels)[] = work
     ? ["dashboard", "projects", "settings", "pricing"]
     : ["home", "dashboard", "pricing"];
   return (
     <>
       <header className="site-head">
         <div className="head-inner">
-          <Brand />
+          <Brand language={language} />
           <nav
-            aria-label="Primary"
+            aria-label={t("Primary")}
             className={menu ? "nav-links expanded" : "nav-links"}
           >
             {links.map((r) => (
@@ -116,22 +153,37 @@ function App() {
                 }
                 onClick={() => setMenu(false)}
               >
-                {r === "home" ? "Overview" : r[0].toUpperCase() + r.slice(1)}
+                {labels[r]}
               </a>
             ))}
           </nav>
           <div className="head-actions">
+            <select
+              className="language-switch"
+              aria-label={t("Language")}
+              value={language}
+              onChange={(event) =>
+                setLanguage(event.target.value === "ru" ? "ru" : "en")
+              }
+            >
+              <option value="en" lang="en">
+                EN
+              </option>
+              <option value="ru" lang="ru">
+                RU
+              </option>
+            </select>
             <Button
               variant="ghost"
               size="icon"
-              aria-label={dark ? "Use light theme" : "Use dark theme"}
+              aria-label={dark ? t("Use light theme") : t("Use dark theme")}
               onClick={() => setDark(!dark)}
             >
               {dark ? <Sun size={18} /> : <Moon size={18} />}
             </Button>
             {!work && (
               <a className="nav-cta" href="#dashboard">
-                Get early access
+                {t("Get early access")}
               </a>
             )}
             <Button
@@ -139,7 +191,7 @@ function App() {
               size="icon"
               className="mobile-menu"
               aria-expanded={menu}
-              aria-label="Toggle navigation"
+              aria-label={t("Toggle navigation")}
               onClick={() => setMenu(!menu)}
             >
               {menu ? <X /> : <Menu />}
@@ -148,16 +200,16 @@ function App() {
         </div>
       </header>
       {work ? (
-        <Workspace page={page} />
+        <Workspace page={page} language={language} />
       ) : page === "pricing" ? (
-        <Pricing />
+        <Pricing language={language} />
       ) : (
-        <Landing />
+        <Landing language={language} />
       )}
       <footer className="site-footer">
-        <Brand />
-        <span>Private, on-device contract review</span>
-        <a href="#pricing">Pricing</a>
+        <Brand language={language} />
+        <span>{t("Private, on-device contract review")}</span>
+        <a href="#pricing">{t("Pricing")}</a>
       </footer>
     </>
   );

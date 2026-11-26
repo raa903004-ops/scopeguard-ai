@@ -24,6 +24,14 @@ import {
   type Result,
 } from "./engine";
 import { Button } from "./button";
+import {
+  interpolate,
+  locale,
+  MessageError,
+  translate,
+  type Language,
+  type Message,
+} from "./i18n";
 import "./workspace.css";
 
 type Project = { id: string; name: string; contract: string };
@@ -36,6 +44,7 @@ type Review = Result & {
   rate: number;
   created: string;
   source: "Manual" | "Local AI";
+  reasoningLanguage?: Language;
 };
 interface Store extends DBSchema {
   projects: { key: string; value: Project };
@@ -50,15 +59,13 @@ const database = () =>
       db.createObjectStore("settings");
     },
   });
-const money = (value: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
-    value,
-  );
 const statuses = {
   in_scope: "In scope",
   out_of_scope: "Out of scope",
   uncertain: "Uncertain",
-};
+} as const;
+const requiredField = "Fill in this field.";
+const invalidNumber = "Enter a valid number within the allowed range.";
 const blankReview: Result = {
   status: "uncertain",
   evidence: "",
@@ -71,8 +78,10 @@ const validRate = (rate: string) =>
   Number(rate) >= 0 &&
   Number(rate) <= 100000 &&
   /^\d+(\.\d{1,2})?$/.test(rate);
-const errorText = (err: unknown) =>
-  err instanceof Error ? err.message : "The operation could not be completed.";
+const errorKey = (err: unknown): Message =>
+  err instanceof MessageError
+    ? err.key
+    : "The operation could not be completed.";
 function Panel({
   title,
   icon,
@@ -92,36 +101,59 @@ function Panel({
     </section>
   );
 }
-function email(r: Review) {
-  const context = r.evidence
-    ? "\n\nThe agreement states “" + r.evidence + "”"
-    : "";
-  const decision =
-    r.status === "out_of_scope"
-      ? "This work is outside our current agreement. My estimate is " +
-        r.hours +
-        " hours at " +
-        money(r.rate) +
-        "/hour, totaling " +
-        money(revenue(r.hours, r.rate)) +
-        ". Please confirm before I begin."
-      : r.status === "in_scope"
-        ? "This work falls within our current agreement."
-        : "Could we clarify the deliverables before I proceed?";
-  return (
-    "Subject: Scope review — " +
-    r.name +
-    "\n\nHi,\n\nThanks for your request:\n“" +
-    r.request +
-    "”" +
-    context +
-    "\n\n" +
-    decision +
-    "\n\nBest regards"
-  );
-}
-
-export default function Workspace({ page }: { page: string }) {
+export default function Workspace({
+  page,
+  language,
+}: {
+  page: string;
+  language: Language;
+}) {
+  const t = translate(language);
+  const number = new Intl.NumberFormat(locale[language], {
+    maximumFractionDigits: 6,
+  });
+  const money = (value: number) =>
+    new Intl.NumberFormat(locale[language], {
+      style: "currency",
+      currency: "USD",
+    }).format(value);
+  function email(review: Review) {
+    const subject = interpolate(t("Subject: Scope review — {project}"), {
+      project: review.name,
+    });
+    const quote =
+      review.evidence &&
+      interpolate(t("The agreement states “{quote}”"), {
+        quote: review.evidence,
+      });
+    const decision =
+      review.status === "out_of_scope"
+        ? interpolate(
+            t(
+              "This work is outside our current agreement. My estimate is {hours} h at {rate} per hour, totaling {total}. Please confirm before I begin.",
+            ),
+            {
+              hours: number.format(review.hours),
+              rate: money(review.rate),
+              total: money(revenue(review.hours, review.rate)),
+            },
+          )
+        : t(
+            review.status === "in_scope"
+              ? "This work falls within our current agreement."
+              : "Could we clarify the deliverables before I proceed?",
+          );
+    return [
+      subject,
+      t("Hi,"),
+      t("Thanks for your request:") + "\n“" + review.request + "”",
+      quote,
+      decision,
+      t("Best regards"),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  }
   const [projects, setProjects] = useState<Project[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [selected, select] = useState("");
@@ -135,10 +167,10 @@ export default function Workspace({ page }: { page: string }) {
   const [excerpt, setExcerpt] = useState("");
   const [mode, setMode] = useState<"ai" | "manual">("ai");
   const [manual, setManual] = useState<Result>({ ...blankReview });
-  const [activity, setActivity] = useState("");
+  const [activity, setActivity] = useState<Message>();
   const [progress, setProgress] = useState<number>();
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [error, setError] = useState<Message>();
+  const [notice, setNotice] = useState<Message>();
   const [detail, setDetail] = useState<Review>();
   const [draft, setDraft] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -165,7 +197,7 @@ export default function Workspace({ page }: { page: string }) {
       }
     };
     void init().catch((err) => {
-      if (active) setError(errorText(err));
+      if (active) setError(errorKey(err));
     });
     void hasGPU()
       .then((ok) => {
@@ -184,16 +216,16 @@ export default function Workspace({ page }: { page: string }) {
       active = false;
     };
   }, []);
-  async function perform(label: string, fn: () => Promise<void>) {
+  async function perform(label: Message, fn: () => Promise<void>) {
     setActivity(label);
-    setError("");
-    setNotice("");
+    setError(undefined);
+    setNotice(undefined);
     try {
       await fn();
     } catch (err) {
-      setError(errorText(err));
+      setError(errorKey(err));
     } finally {
-      setActivity("");
+      setActivity(undefined);
       setProgress(undefined);
     }
   }
@@ -214,7 +246,7 @@ export default function Workspace({ page }: { page: string }) {
     event.preventDefault();
     await perform("Saving project…", async () => {
       if (!name.trim() || !contract.trim())
-        throw new Error("Enter a project name and contract text.");
+        throw new MessageError("Enter a project name and contract text.");
       const p = { id: crypto.randomUUID(), name: name.trim(), contract };
       const db = await database();
       try {
@@ -237,10 +269,16 @@ export default function Workspace({ page }: { page: string }) {
       async () => {
         const output =
           mode === "ai"
-            ? await analyze(project.contract, request, (message, fraction) => {
-                setActivity(message);
-                setProgress(fraction);
-              }, excerpt)
+            ? await analyze(
+                project.contract,
+                request,
+                (message, fraction) => {
+                  setActivity(message);
+                  setProgress(fraction);
+                },
+                excerpt,
+                language,
+              )
             : validate(manual, project.contract);
         const r: Review = {
           ...validate(output, project.contract),
@@ -252,12 +290,13 @@ export default function Workspace({ page }: { page: string }) {
           rate: Number(rate),
           created: new Date().toISOString(),
           source: mode === "ai" ? "Local AI" : "Manual",
+          reasoningLanguage: mode === "ai" ? language : undefined,
         };
         const db = await database();
         try {
           const tx = db.transaction(["projects", "reviews"], "readwrite");
           if (!(await tx.objectStore("projects").getKey(project.id))) {
-            throw new Error(
+            throw new MessageError(
               "This project was deleted while the review was running.",
             );
           }
@@ -276,21 +315,21 @@ export default function Workspace({ page }: { page: string }) {
   }
   const disabled = !ready || !!activity;
   const creator = (
-    <Panel title="New project" icon={<Folder />}>
+    <Panel title={t("New project")} icon={<Folder />}>
       <form onSubmit={saveProject}>
         <fieldset disabled={disabled}>
           <label>
-            Project name
+            {t("Project name")}
             <input
               required
               maxLength={120}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Brand identity for Olive Studio"
+              placeholder={t("e.g. Brand identity for Olive Studio")}
             />
           </label>
           <label className="ws-upload">
-            <Upload size={18} /> Import PDF or TXT
+            <Upload size={18} /> {t("Import PDF or TXT")}
             <input
               type="file"
               accept=".pdf,.txt"
@@ -305,70 +344,96 @@ export default function Workspace({ page }: { page: string }) {
             />
           </label>
           <label>
-            Contract text
+            {t("Contract text")}
             <textarea
               required
               value={contract}
               rows={6}
               onChange={(e) => setContract(e.target.value)}
-              placeholder="Paste your agreement or import a document above."
+              placeholder={t(
+                "Paste your agreement or import a document above.",
+              )}
             />
           </label>
           <Button type="submit">
-            <Plus size={16} /> Create project
+            <Plus size={16} /> {t("Create project")}
           </Button>
         </fieldset>
       </form>
     </Panel>
   );
+  const feedback = activity ?? notice;
   const currentReviews = reviews.filter((r) => r.project === selected);
   return (
-    <main className="ws">
+    <main
+      className="ws"
+      onInvalidCapture={(event) => {
+        if (!(
+          event.target instanceof HTMLInputElement ||
+          event.target instanceof HTMLTextAreaElement
+        ))
+          return;
+        event.preventDefault();
+        const field = event.target;
+        if (field !== field.form?.querySelector(":invalid")) return;
+        setNotice(undefined);
+        setError(field.validity.valueMissing ? requiredField : invalidNumber);
+        field.focus();
+      }}
+      onInputCapture={() => {
+        if (error === requiredField || error === invalidNumber)
+          setError(undefined);
+      }}
+    >
       <div className="ws-top">
         <div>
-          <small>LOCAL WORKSPACE</small>
+          <small>{t("LOCAL WORKSPACE")}</small>
           <h1>
             {page === "projects"
-              ? "Projects"
+              ? t("Projects")
               : page === "settings"
-                ? "Settings"
-                : "Dashboard"}
+                ? t("Settings")
+                : t("Dashboard")}
           </h1>
           <p>
             {page === "projects"
-              ? "Manage the agreements behind your reviews."
+              ? t("Manage the agreements behind your reviews.")
               : page === "settings"
-                ? "Control your rates and local data."
-                : "Check client requests against your agreement."}
+                ? t("Control your rates and local data.")
+                : t("Check client requests against your agreement.")}
           </p>
         </div>
         <span className="ws-local">
-          <ShieldCheck size={15} /> On this device
+          <ShieldCheck size={15} /> {t("On this device")}
         </span>
       </div>
       {error && (
         <p className="ws-error" role="alert">
-          {error}
+          {t(error)}
         </p>
       )}
-      {(activity || notice) && (
+      {feedback && (
         <p className="ws-notice" role="status">
-          {activity || notice}
+          {t(feedback)}
           {progress !== undefined && (
-            <progress aria-label="Model download progress" value={progress} max={1} />
+            <progress
+              aria-label={t("Model download progress")}
+              value={progress}
+              max={1}
+            />
           )}
         </p>
       )}
-      {!ready && !error && <p>Opening workspace…</p>}
+      {!ready && !error && <p>{t("Opening workspace…")}</p>}
       {page === "settings" ? (
         <div className="ws-grid">
-          <Panel title="Review defaults" icon={<SlidersHorizontal />}>
+          <Panel title={t("Review defaults")} icon={<SlidersHorizontal />}>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
                 void perform("Saving rate…", async () => {
                   if (!validRate(rate))
-                    throw new Error("Enter a valid USD hourly rate.");
+                    throw new MessageError("Enter a valid USD hourly rate.");
                   const db = await database();
                   try {
                     await db.put("settings", Number(rate), "rate");
@@ -380,7 +445,7 @@ export default function Workspace({ page }: { page: string }) {
               }}
             >
               <label>
-                Hourly rate (USD)
+                {t("Hourly rate (USD)")}
                 <input
                   type="number"
                   min="0"
@@ -391,22 +456,21 @@ export default function Workspace({ page }: { page: string }) {
                   onChange={(e) => setRate(e.target.value)}
                 />
               </label>
-              <Button disabled={disabled}>Save rate</Button>
+              <Button disabled={disabled}>{t("Save rate")}</Button>
             </form>
             <p>
-              WebGPU{" "}
               {gpu === null
-                ? "check in progress"
+                ? t("WebGPU check in progress.")
                 : gpu
-                  ? "available"
-                  : "unavailable · manual review available"}
-              .
+                  ? t("WebGPU available.")
+                  : t("WebGPU unavailable · manual review available.")}
             </p>
           </Panel>
-          <Panel title="Workspace data" icon={<Archive />}>
+          <Panel title={t("Workspace data")} icon={<Archive />}>
             <p>
-              Export all projects, contracts, review history and your saved
-              hourly rate as JSON.
+              {t(
+                "Export all projects, contracts, review history and your saved hourly rate as JSON.",
+              )}
             </p>
             <Button
               disabled={disabled}
@@ -452,14 +516,15 @@ export default function Workspace({ page }: { page: string }) {
                 })
               }
             >
-              <Download size={16} /> Export workspace
+              <Download size={16} /> {t("Export workspace")}
             </Button>
             <hr />
             {confirmDelete ? (
               <>
                 <p>
-                  Delete every saved contract, review and rate from this
-                  browser? This is permanent.
+                  {t(
+                    "Delete every saved contract, review and rate from this browser? This is permanent.",
+                  )}
                 </p>
                 <div className="ws-actions">
                   <Button
@@ -497,13 +562,13 @@ export default function Workspace({ page }: { page: string }) {
                       })
                     }
                   >
-                    Confirm deletion
+                    {t("Confirm deletion")}
                   </Button>
                   <button
                     disabled={disabled}
                     onClick={() => setConfirmDelete(false)}
                   >
-                    Cancel
+                    {t("Cancel")}
                   </button>
                 </div>
               </>
@@ -513,7 +578,7 @@ export default function Workspace({ page }: { page: string }) {
                 className="ws-danger"
                 onClick={() => setConfirmDelete(true)}
               >
-                Delete workspace data
+                {t("Delete workspace data")}
               </button>
             )}
           </Panel>
@@ -522,10 +587,12 @@ export default function Workspace({ page }: { page: string }) {
         <div className="ws-grid">
           {creator}
           <Panel
-            title={"Saved projects · " + projects.length}
+            title={t("Saved projects") + " · " + projects.length}
             icon={<Layers />}
           >
-            {!projects.length && <p>Your saved agreements will appear here.</p>}
+            {!projects.length && (
+              <p>{t("Your saved agreements will appear here.")}</p>
+            )}
             {projects.map((p) => (
               <details key={p.id}>
                 <summary>{p.name}</summary>
@@ -537,7 +604,7 @@ export default function Workspace({ page }: { page: string }) {
                     location.hash = "dashboard";
                   }}
                 >
-                  Review request
+                  {t("Review request")}
                 </Button>
               </details>
             ))}
@@ -547,10 +614,10 @@ export default function Workspace({ page }: { page: string }) {
         <>
           <div className="ws-stats">
             {[
-              ["Projects", projects.length],
-              ["Saved reviews", reviews.length],
+              [t("Projects"), projects.length],
+              [t("Saved reviews"), reviews.length],
               [
-                "Estimated extra work",
+                t("Estimated extra work"),
                 money(
                   reviews.reduce(
                     (n, r) =>
@@ -579,16 +646,16 @@ export default function Workspace({ page }: { page: string }) {
                       disabled={disabled}
                       onClick={() => setEditing(false)}
                     >
-                      Cancel new project
+                      {t("Cancel new project")}
                     </button>
                   )}
                 </>
               ) : (
-                <Panel title="Review a request" icon={<ScanLine />}>
+                <Panel title={t("Review a request")} icon={<ScanLine />}>
                   <form onSubmit={saveReview}>
                     <fieldset disabled={disabled}>
                       <label>
-                        Project
+                        {t("Project")}
                         <select
                           value={selected}
                           onChange={(e) =>
@@ -605,37 +672,38 @@ export default function Workspace({ page }: { page: string }) {
                         </select>
                       </label>
                       <details>
-                        <summary>View contract</summary>
+                        <summary>{t("View contract")}</summary>
                         <pre>{project.contract}</pre>
                       </details>
                       <label>
-                        Client request
+                        {t("Client request")}
                         <textarea
                           required
                           rows={3}
                           value={request}
                           onChange={(e) => setRequest(e.target.value)}
-                          placeholder="Paste the client’s request…"
+                          placeholder={t("Paste the client’s request…")}
                         />
                       </label>
                       <label>
-                        Review method
+                        {t("Review method")}
                         <select
                           value={mode}
                           onChange={(e) =>
                             setMode(e.target.value as typeof mode)
                           }
                         >
-                          <option value="manual">Manual review</option>
+                          <option value="manual">{t("Manual review")}</option>
                           <option value="ai" disabled={!gpu}>
-                            Local AI {gpu ? "" : "· WebGPU unavailable"}
+                            {t("Local AI")}
+                            {gpu ? "" : " · " + t("WebGPU unavailable")}
                           </option>
                         </select>
                       </label>
                       {mode === "manual" ? (
                         <>
                           <label>
-                            Classification
+                            {t("Classification")}
                             <select
                               value={manual.status}
                               onChange={(e) =>
@@ -647,13 +715,13 @@ export default function Workspace({ page }: { page: string }) {
                             >
                               {Object.entries(statuses).map(([k, v]) => (
                                 <option key={k} value={k}>
-                                  {v}
+                                  {t(v)}
                                 </option>
                               ))}
                             </select>
                           </label>
                           <label>
-                            Exact contract quote
+                            {t("Exact contract quote")}
                             <textarea
                               required={manual.status !== "uncertain"}
                               value={manual.evidence}
@@ -666,7 +734,7 @@ export default function Workspace({ page }: { page: string }) {
                             />
                           </label>
                           <label>
-                            Reasoning
+                            {t("Reasoning")}
                             <textarea
                               required
                               value={manual.reasoning}
@@ -679,7 +747,7 @@ export default function Workspace({ page }: { page: string }) {
                             />
                           </label>
                           <label>
-                            Estimated hours
+                            {t("Estimated hours")}
                             <input
                               type="number"
                               required
@@ -698,25 +766,28 @@ export default function Workspace({ page }: { page: string }) {
                       ) : (
                         <>
                           <p>
-                            The first analysis downloads the model. Inference runs
-                            on this device.
+                            {t(
+                              "The first analysis downloads the model. Inference runs on this device.",
+                            )}
                           </p>
                           <details>
-                            <summary>Review a contract excerpt</summary>
+                            <summary>{t("Review a contract excerpt")}</summary>
                             <label>
-                              Exact excerpt (optional)
+                              {t("Exact excerpt (optional)")}
                               <textarea
                                 rows={4}
                                 value={excerpt}
                                 onChange={(e) => setExcerpt(e.target.value)}
-                                placeholder="Copy relevant clauses from the contract above."
+                                placeholder={t(
+                                  "Copy relevant clauses from the contract above.",
+                                )}
                               />
                             </label>
                           </details>
                         </>
                       )}
                       <label>
-                        Hourly rate (USD)
+                        {t("Hourly rate (USD)")}
                         <input
                           required
                           type="number"
@@ -735,11 +806,11 @@ export default function Workspace({ page }: { page: string }) {
                             <Check size={16} />
                           )}{" "}
                           {mode === "ai"
-                            ? "Analyze locally"
-                            : "Save manual review"}
+                            ? t("Analyze locally")
+                            : t("Save manual review")}
                         </Button>
                         <button type="button" onClick={() => setEditing(true)}>
-                          New project
+                          {t("New project")}
                         </button>
                       </div>
                     </fieldset>
@@ -749,21 +820,22 @@ export default function Workspace({ page }: { page: string }) {
             </div>
             <div>
               {detail && (
-                <Panel title={statuses[detail.status]} icon={<FileText />}>
+                <Panel title={t(statuses[detail.status])} icon={<FileText />}>
                   <small>
-                    {detail.source} · {detail.name}
+                    {t(detail.source)} · {detail.name}
                   </small>
                   <p>{detail.request}</p>
                   {detail.evidence && (
                     <blockquote>{detail.evidence}</blockquote>
                   )}
-                  <p>{detail.reasoning}</p>
+                  <p lang={detail.reasoningLanguage}>{detail.reasoning}</p>
                   <b>
-                    {detail.hours} h × {money(detail.rate)} / h ={" "}
+                    {number.format(detail.hours)} {t("h")} ×{" "}
+                    {money(detail.rate)} / {t("h")} ={" "}
                     {money(revenue(detail.hours, detail.rate))}
                   </b>
                   <p>
-                    Estimated extra work ·{" "}
+                    {t("Estimated extra work")} ·{" "}
                     {money(
                       detail.status === "out_of_scope"
                         ? revenue(detail.hours, detail.rate)
@@ -772,12 +844,12 @@ export default function Workspace({ page }: { page: string }) {
                   </p>
                   {!draft ? (
                     <Button onClick={() => setDraft(email(detail))}>
-                      Generate client email
+                      {t("Generate client email")}
                     </Button>
                   ) : (
                     <>
                       <label>
-                        Email draft
+                        {t("Email draft")}
                         <textarea
                           rows={9}
                           value={draft}
@@ -792,15 +864,15 @@ export default function Workspace({ page }: { page: string }) {
                           })
                         }
                       >
-                        <Clipboard size={16} /> Copy email
+                        <Clipboard size={16} /> {t("Copy email")}
                       </Button>
                     </>
                   )}
                 </Panel>
               )}
-              <Panel title="Review history" icon={<History />}>
+              <Panel title={t("Review history")} icon={<History />}>
                 {currentReviews.length === 0 ? (
-                  <p>Saved reviews for this project will appear here.</p>
+                  <p>{t("Saved reviews for this project will appear here.")}</p>
                 ) : (
                   currentReviews.map((r) => (
                     <button
@@ -809,10 +881,13 @@ export default function Workspace({ page }: { page: string }) {
                       key={r.id}
                       onClick={() => openReview(r)}
                     >
-                      <b>{statuses[r.status]}</b>
+                      <b>{t(statuses[r.status])}</b>
                       <span>{r.request}</span>
                       <small>
-                        {r.source} · {new Date(r.created).toLocaleDateString()}
+                        {t(r.source)} ·{" "}
+                        {new Date(r.created).toLocaleDateString(
+                          locale[language],
+                        )}
                       </small>
                     </button>
                   ))

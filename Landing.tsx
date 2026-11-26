@@ -15,47 +15,55 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { Button } from "./button";
+import { locale, translate, type Language, type Translate } from "./i18n";
 import "./landing.css";
 
-const examples = [
+const examplesFor = (t: Translate) => [
   {
-    name: "Additional page",
-    request: "Could you also design a pricing page for the launch?",
-    clause: "Additional pages require a separate estimate.",
-    verdict: "Out of scope",
-    reason:
+    name: t("Additional page"),
+    request: t("Could you also design a pricing page for the launch?"),
+    clause: t("Additional pages require a separate estimate."),
+    verdict: t("Out of scope"),
+    reason: t(
       "The agreement covers the homepage only. A pricing page adds a separate deliverable.",
+    ),
     hours: 6,
     icon: TriangleAlert,
   },
   {
-    name: "Revision",
-    request: "Can we use our first revision to adjust the homepage typography?",
-    clause: "Two rounds of homepage revisions are included.",
-    verdict: "In scope",
-    reason:
+    name: t("Revision"),
+    request: t(
+      "Can we use our first revision to adjust the homepage typography?",
+    ),
+    clause: t("Two rounds of homepage revisions are included."),
+    verdict: t("In scope"),
+    reason: t(
       "The client is requesting the first of two included revision rounds.",
+    ),
     hours: 0,
     icon: Check,
   },
   {
-    name: "Handoff",
-    request: "Can you walk our developers through the final files?",
-    clause: "Final design files will be delivered in Figma.",
-    verdict: "Uncertain",
-    reason:
+    name: t("Handoff"),
+    request: t("Can you walk our developers through the final files?"),
+    clause: t("Final design files will be delivered in Figma."),
+    verdict: t("Uncertain"),
+    reason: t(
       "The agreement specifies a file handoff but leaves a live walkthrough undefined.",
+    ),
     hours: 0,
     icon: CircleHelp,
   },
 ];
-export default function Landing() {
+export default function Landing({ language }: { language: Language }) {
+  const t = translate(language);
+  const examples = examplesFor(t);
   const [index, setIndex] = useState(0);
   const [rate, setRate] = useState("125");
   const demo = useRef<HTMLElement>(null);
   const example = examples[index];
   const VerdictIcon = example.icon;
-  const amount = new Intl.NumberFormat("en-US", {
+  const amount = new Intl.NumberFormat(locale[language], {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: 2,
@@ -65,15 +73,16 @@ export default function Landing() {
       <section className="sg-hero">
         <div className="sg-hero-copy">
           <span className="sg-eyebrow">
-            <span /> LOCAL-FIRST SCOPE INTELLIGENCE
+            <span /> {t("LOCAL-FIRST SCOPE INTELLIGENCE")}
           </span>
           <h1>
-            Find the work
-            <br /> <em>between</em> the lines.
+            {t("Find the work")}
+            <br /> <em>{t("between")}</em> {t("the lines.")}
           </h1>
           <p>
-            Catch out-of-scope requests before they become unpaid hours. Compare
-            client requests against your contract, privately on your device.
+            {t(
+              "Catch out-of-scope requests before they become unpaid hours. Compare client requests against your contract, privately on your device.",
+            )}
           </p>
           <div className="sg-actions">
             <Button
@@ -81,7 +90,7 @@ export default function Landing() {
                 location.hash = "dashboard";
               }}
             >
-              Open workspace
+              {t("Open workspace")}
             </Button>
             <button
               className="sg-demo-button"
@@ -90,41 +99,43 @@ export default function Landing() {
                 demo.current?.focus({ preventScroll: true });
               }}
             >
-              <Play size={15} /> Explore demo
+              <Play size={15} /> {t("Explore demo")}
             </button>
           </div>
           <div className="sg-private">
-            <LockKeyhole size={14} /> Private by design <i /> No account
-            required
+            <LockKeyhole size={14} /> {t("Private by design")}
+            <i /> {t("No account required")}
           </div>
         </div>
         <div
           className="sg-art"
           role="img"
-          aria-label="Illustrative contract scan highlighting an additional-page clause"
+          aria-label={t(
+            "Illustrative contract scan highlighting an additional-page clause",
+          )}
         >
           <div className="sg-surface">
             <div className="sg-art-label">
-              <Focus size={14} /> CONTRACT INSPECTOR
+              <Focus size={14} /> {t("CONTRACT INSPECTOR")}
             </div>
             <div className="sg-sheet sg-shadow-paper" />
             <div className="sg-sheet sg-document">
               <div className="sg-paper-meta">
-                FIELDWORK STUDIO <span>DOCUMENT / 01</span>
+                FIELDWORK STUDIO <span>{t("DOCUMENT / 01")}</span>
               </div>
               <strong>
-                Statement
+                {t("Statement")}
                 <br />
-                of Work<span>.</span>
+                {t("of Work")}
+                <span>.</span>
               </strong>
-              <div className="sg-paper-sub">Website design engagement</div>
+              <div className="sg-paper-sub">
+                {t("Website design engagement")}
+              </div>
               <div className="sg-paper-rule" />
-              <b>02 &nbsp; Scope of services</b>
-              <p>Design and delivery of one marketing homepage.</p>
-              <mark>
-                Additional pages require
-                <br /> a separate estimate.
-              </mark>
+              <b>02 &nbsp; {t("Scope of services")}</b>
+              <p>{t("Design and delivery of one marketing homepage.")}</p>
+              <mark>{t("Additional pages require a separate estimate.")}</mark>
               <div className="sg-faux-line" />
               <div className="sg-faux-line short" />
             </div>
@@ -132,13 +143,13 @@ export default function Landing() {
             <div className="sg-tag">
               <ScanLine size={18} />
               <div>
-                <small>CLAUSE DETECTED</small>
-                <b>Scope boundary</b>
+                <small>{t("CLAUSE DETECTED")}</small>
+                <b>{t("Scope boundary")}</b>
               </div>
             </div>
             <div className="sg-art-foot">
-              <Fingerprint size={16} /> LOCAL DOCUMENT SCAN{" "}
-              <span>ILLUSTRATION</span>
+              <Fingerprint size={16} /> {t("LOCAL DOCUMENT SCAN")}{" "}
+              <span>{t("ILLUSTRATION")}</span>
             </div>
           </div>
         </div>
@@ -152,27 +163,28 @@ export default function Landing() {
         <div className="sg-section-heading">
           <div>
             <span className="sg-eyebrow">
-              <span /> INTERACTIVE DEMO
+              <span /> {t("INTERACTIVE DEMO")}
             </span>
-            <h2>Inside a scope review.</h2>
+            <h2>{t("Inside a scope review.")}</h2>
           </div>
           <p>
-            Explore a sample request and its contract evidence.
+            {t("Explore a sample request and its contract evidence.")}
             <br />
-            Synthetic examples with prepared reviews.
+            {t("Synthetic examples with prepared reviews.")}
           </p>
         </div>
         <div className="sg-console">
           <div className="sg-toolbar">
             <span>
-              <Layers2 size={17} /> Fieldwork Studio <i>/</i> Website redesign
+              <Layers2 size={17} /> Fieldwork Studio <i>/</i>{" "}
+              {t("Website redesign")}
             </span>
-            <small>Demo project</small>
+            <small>{t("Demo project")}</small>
           </div>
           <div className="sg-console-body">
             <div className="sg-rail">
               <h3>
-                <ListFilter size={15} /> Client requests
+                <ListFilter size={15} /> {t("Client requests")}
               </h3>
               {examples.map((x, i) => (
                 <button
@@ -187,16 +199,16 @@ export default function Landing() {
               ))}
             </div>
             <div className="sg-case" aria-live="polite">
-              <h3>Client request</h3>
+              <h3>{t("Client request")}</h3>
               <p className="sg-request">“{example.request}”</p>
               <h3>
-                <FileText size={14} /> Contract evidence
+                <FileText size={14} /> {t("Contract evidence")}
               </h3>
               <blockquote>{example.clause}</blockquote>
             </div>
             <div className="sg-result" aria-live="polite">
               <h3>
-                <Braces size={14} /> Prepared review
+                <Braces size={14} /> {t("Prepared review")}
               </h3>
               <b className={"sg-verdict verdict-" + index}>
                 <VerdictIcon size={14} />
@@ -206,7 +218,7 @@ export default function Landing() {
               {index === 0 && (
                 <div className="sg-est">
                   <label>
-                    Hourly rate ($)
+                    {t("Hourly rate ($)")}
                     <input
                       type="number"
                       min="0"
@@ -228,7 +240,7 @@ export default function Landing() {
                     />
                   </label>
                   <div>
-                    <small>6 sample hours</small>
+                    <small>{t("6 sample hours")}</small>
                     <strong>{amount}</strong>
                   </div>
                 </div>
