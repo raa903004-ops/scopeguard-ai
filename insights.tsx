@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { workStatuses, type WorkRecord } from "./beta";
 import { currencies, hourRange, type Currency } from "./estimates";
 import { revenue, type Result } from "./engine";
 import { locale, type Language, type Translate } from "./i18n";
@@ -16,6 +17,8 @@ export type Review = Result & {
   reasoningLanguage?: Language;
   synthetic?: boolean;
   edited?: boolean;
+  work?: WorkRecord;
+  agreement?: string;
 };
 
 export const statuses = {
@@ -220,6 +223,10 @@ export function exportCsv(reviews: Review[], t: Translate, language: Language) {
       t("Currency"),
       t("Hourly rate"),
       t("Estimated extra work"),
+      t("Work status"),
+      t("Agreed amount"),
+      t("Received amount"),
+      t("Currency") + " (" + t("Extra work") + ")",
     ],
     ...reviews.map((r) => [
       r.name,
@@ -248,6 +255,14 @@ export function exportCsv(reviews: Review[], t: Translate, language: Language) {
       reviewCurrency(r),
       r.rate,
       extraWork(r).toFixed(2),
+      r.work
+        ? t(workStatuses[r.work.status])
+        : r.status === "out_of_scope"
+          ? t("Detected")
+          : "",
+      r.work?.amount.toFixed(2) ?? "",
+      r.work?.received.toFixed(2) ?? "",
+      r.work?.currency ?? "",
     ]),
   ];
   const csv = rows
@@ -318,6 +333,13 @@ export function FindingsReport({
           </p>
           {r.evidence && <blockquote>{r.evidence}</blockquote>}
           <p>{r.reasoning}</p>
+          {r.work && (
+            <p>
+              {t("Work status")} · {t(workStatuses[r.work.status])} ·{" "}
+              {t("Agreed amount")} {money(r.work.amount, r.work.currency)} ·{" "}
+              {t("Received amount")} {money(r.work.received, r.work.currency)}
+            </p>
+          )}
           {r.tasks && (
             <TaskEstimates tasks={r.tasks} language={language} t={t} />
           )}

@@ -65,6 +65,8 @@ import {
   type Currency,
   type TaskEstimate,
 } from "./estimates";
+import { financialTotals, parseBackup, validWork, workStatuses } from "./beta";
+import { ExtraWork, ProjectVersions } from "./beta-panels";
 import "./workspace.css";
 
 const requiredField = "Fill in this field.";
@@ -394,29 +396,262 @@ export default function Workspace({
     });
   }
 
-  async function storeReview(review: Review, update = false) {
+  async function saveContractVersion(p: Project, updated: string) {
+    await perform("Saving project…", async () => {
+      if (!updated.trim() || updated === p.contract)
+        throw new MessageError("Enter changed contract text.");
+      const db = await database();
+      const versioned: Project = {
+        ...p,
+        contract: updated,
+        versions: [
+          ...(p.versions ?? [{ text: p.contract }]),
+          { text: updated, created: new Date().toISOString() },
+        ],
+      };
+      try {
+        const tx = db.transaction("projects", "readwrite");
+        const current = await tx.store.get(p.id);
+        if (
+          !current ||
+          current.contract !== p.contract ||
+          current.versions?.length !== p.versions?.length
+        )
+          throw new MessageError(
+            "The contract changed in another tab. Reopen the project and try again.",
+          );
+        await tx.store.put(versioned);
+        await tx.done;
+      } finally {
+        db.close();
+      }
+      setProjects((all) =>
+        all.map((item) => (item.id === p.id ? versioned : item)),
+      );
+      if (p.id === selected) choose(versioned);
+      setNotice("Contract version saved.");
+    });
+  }
+
+  async function exportBackup(projectId?: string) {
+    await perform("Exporting…", async () => {
+      const db = await database();
+      try {
+        const tx = db.transaction(["projects", "reviews", "settings", "chat"]);
+        const [ps, rs, conversations, defaultRate, defaultCurrency] =
+          await Promise.all([
+            tx.objectStore("projects").getAll(),
+            tx.objectStore("reviews").getAll(),
+            tx.objectStore("chat").getAll(),
+            tx.objectStore("settings").get("rate"),
+            tx.objectStore("settings").get("currency"),
+          ]);
+        const payload = {
+          version: 3,
+          projects: ps.filter((p) => !projectId || p.id === projectId),
+          reviews: rs.filter((r) => !projectId || r.project === projectId),
+          chats: conversations.filter(
+            (chat) => !projectId || chat.project === projectId,
+          ),
+          ...(projectId
+            ? {}
+            : { rate: defaultRate ?? 100, currency: defaultCurrency ?? "USD" }),
+        };
+        const url = URL.createObjectURL(
+          new Blob([JSON.stringify(payload, null, 2)], {
+            type: "application/json",
+          }),
+        );
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = projectId
+          ? "scopeguard-project.json"
+          : "scopeguard-workspace.json";
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } finally {
+        db.close();
+      }
+    });
+  }
+
+  async function importBackup(file: File) {
+    await perform("Importing backup…", async () => {
+      const backup = parseBackup(await file.text());
+      const db = await database();
+      try {
+        const tx = db.transaction(
+          ["projects", "reviews", "settings", "chat"],
+          "readwrite",
+        );
+        try {
+          const ps = tx.objectStore("projects"),
+            rs = tx.objectStore("reviews"),
+            cs = tx.objectStore("chat");
+          const [current, savedReviews, savedChats] = await Promise.all([
+            ps.getAll(),
+            rs.getAll(),
+            cs.getAll(),
+          ]);
+          const projectsById = new Map(current.map((p) => [p.id, p]));
+          for (const project of backup.projects) {
+            const present = projectsById.get(project.id);
+            if (
+              present &&
+              (present.name !== project.name ||
+                !!present.synthetic !== !!project.synthetic ||
+                JSON.stringify(
+                  (present.versions ?? [{ text: present.contract }]).map(
+                    (v) => v.text,
+                  ),
+                ) !==
+                  JSON.stringify(
+                    (project.versions ?? [{ text: project.contract }]).map(
+                      (v) => v.text,
+                    ),
+                  ))
+            )
+              throw new MessageError(
+                "Backup project conflicts with an existing project.",
+              );
+            if (!present) await ps.add(project);
+          }
+          const reviewsById = new Map(savedReviews.map((r) => [r.id, r]));
+          for (const review of backup.reviews) {
+            const present = reviewsById.get(review.id);
+            if (present && present.project !== review.project)
+              throw new MessageError(
+                "Invalid or unsupported ScopeGuard backup.",
+              );
+            if (!present) await rs.add(review);
+          }
+          const chatsByProject = new Map(
+            savedChats.map((row) => [row.project, row.turns]),
+          );
+          for (const chat of backup.chats) {
+            const existing = chatsByProject.get(chat.project) ?? [];
+            const keys = new Set(
+              existing.map((turn) =>
+                JSON.stringify([turn.question, turn.answer, turn.version ?? 1]),
+              ),
+            );
+            await cs.put({
+              ...chat,
+              turns: [
+                ...existing,
+                ...chat.turns.filter(
+                  (turn) =>
+                    !keys.has(
+                      JSON.stringify([
+                        turn.question,
+                        turn.answer,
+                        turn.version ?? 1,
+                      ]),
+                    ),
+                ),
+              ],
+            });
+          }
+          if (!current.length) {
+            if (backup.rate !== undefined)
+              await tx.objectStore("settings").put(backup.rate, "rate");
+            if (backup.currency !== undefined)
+              await tx.objectStore("settings").put(backup.currency, "currency");
+          }
+          await tx.done;
+        } catch (error) {
+          try {
+            tx.abort();
+          } catch {
+            /* The transaction already ended. */
+          }
+          await tx.done.catch(() => undefined);
+          throw error;
+        }
+        const [ps, rs, cs, savedRate, savedCurrency] = await Promise.all([
+          db.getAll("projects"),
+          db.getAll("reviews"),
+          db.getAll("chat"),
+          db.get("settings", "rate"),
+          db.get("settings", "currency"),
+        ]);
+        setProjects(ps);
+        setReviews(rs.sort((a, b) => b.created.localeCompare(a.created)));
+        setChats(Object.fromEntries(cs.map((row) => [row.project, row.turns])));
+        defaultTerms.current = {
+          rate: String(savedRate ?? 100),
+          currency: typeof savedCurrency === "string" ? savedCurrency : "USD",
+        };
+        if (!selected && ps[0]) choose(ps[0]);
+        setNotice("Backup imported.");
+      } finally {
+        db.close();
+      }
+    });
+  }
+
+  function changeOrder(review: Review) {
+    const verified = validate(review, review.contract);
+    const terms =
+      review.work &&
+      review.work.status !== "detected" &&
+      review.work.status !== "rejected"
+        ? review.work
+        : undefined;
+    return [
+      t("Draft change order") + " — " + review.name,
+      t("Work description") + "\n" + review.request,
+      t("Contract basis") + "\n“" + verified.evidence + "”",
+      t("Proposed price") +
+        " · " +
+        money(
+          terms?.amount ?? extraWork(review),
+          terms?.currency ?? reviewCurrency(review),
+        ),
+      t("Schedule and payment terms: to be agreed by both parties."),
+      t("Client signature: ____________________"),
+      t("Provider signature: ____________________"),
+    ].join("\n\n");
+  }
+
+  async function storeReview(
+    review: Review,
+    update?: "findings" | "work" | "agreement",
+  ) {
+    let saved = review;
     const db = await database();
     try {
       const tx = db.transaction(["projects", "reviews"], "readwrite");
       const [existingProject, existingReview] = await Promise.all([
         tx.objectStore("projects").getKey(review.project),
-        update ? tx.objectStore("reviews").getKey(review.id) : undefined,
+        update ? tx.objectStore("reviews").get(review.id) : undefined,
       ]);
       if (!existingProject || (update && !existingReview))
         throw new MessageError(
           "This project was deleted while the review was running.",
         );
-      await tx.objectStore("reviews").put(review);
+      if (existingReview) {
+        if (update === "work") saved = { ...existingReview, work: review.work };
+        else if (update === "agreement")
+          saved = { ...existingReview, agreement: review.agreement };
+        else
+          saved = {
+            ...review,
+            work: existingReview.work,
+            agreement: existingReview.agreement,
+          };
+      }
+      await tx.objectStore("reviews").put(saved);
       await tx.done;
     } finally {
       db.close();
     }
     setReviews((list) =>
       update
-        ? list.map((r) => (r.id === review.id ? review : r))
-        : [review, ...list],
+        ? list.map((r) => (r.id === saved.id ? saved : r))
+        : [saved, ...list],
     );
-    openReview(review);
+    openReview(saved);
   }
 
   async function saveReview(event: FormEvent) {
@@ -511,7 +746,7 @@ export default function Workspace({
               ? detail.reasoningLanguage
               : undefined,
         },
-        true,
+        "findings",
       );
       setNotice("Findings updated.");
     });
@@ -534,7 +769,13 @@ export default function Workspace({
           excerpt,
           language,
           {
-            previousQuestions: turns.slice(-2).map((turn) => turn.question),
+            previousQuestions: turns
+              .filter(
+                (turn) =>
+                  (turn.version ?? 1) === (project.versions?.length ?? 1),
+              )
+              .slice(-2)
+              .map((turn) => turn.question),
             signal: controller.signal,
           },
         );
@@ -551,7 +792,10 @@ export default function Workspace({
             "This project was deleted while the review was running.",
           );
         const existing = await tx.objectStore("chat").get(project.id);
-        saved = [...(existing?.turns ?? []), { question: asked, answer }];
+        saved = [
+          ...(existing?.turns ?? []),
+          { question: asked, answer, version: project.versions?.length ?? 1 },
+        ];
         await tx.objectStore("chat").put({ project: project.id, turns: saved });
         await tx.done;
       } finally {
@@ -843,7 +1087,10 @@ export default function Workspace({
         aria-current={page === "analysis" && detail?.id === r.id}
         onClick={() => inspectReview(r)}
       >
-        <b>{t(statuses[r.status])}</b>
+        <b>
+          {t(statuses[r.status])}
+          {r.work && " · " + t(workStatuses[r.work.status])}
+        </b>
         <span>{r.request}</span>
         <small>
           {r.name} · {t(r.source)}
@@ -905,7 +1152,7 @@ export default function Workspace({
   );
   const onboarding = (
     <Panel
-      title={t(sampleMode ? "Live AI demo" : "Try a sample contract")}
+      title={t(sampleMode ? "Live AI demo" : "Getting started")}
       icon={<FileText />}
     >
       <p>
@@ -915,9 +1162,28 @@ export default function Workspace({
             : "Start with a fictional agreement and a client request. Run your first local analysis when ready.",
         )}
       </p>
-      <Button disabled={disabled} onClick={() => void loadSample()}>
-        {t("Load sample contract")}
-      </Button>
+      {!sampleMode && (
+        <ol className="ws-onboarding">
+          <li>{t("Add a contract or load the sample.")}</li>
+          <li>
+            {t("Analyze a client request and verify its contract quote.")}
+          </li>
+          <li>
+            {t("Track approval, invoicing and payment as work progresses.")}
+          </li>
+        </ol>
+      )}
+      <div className="ws-actions">
+        {!sampleMode && (
+          <a
+            className="sg-button sg-solid"
+            href={projects.length ? "#analysis" : "#projects"}
+          >
+            {t(projects.length ? "Start analysis" : "Create project")}
+          </a>
+        )}
+        {sampleAction}
+      </div>
     </Panel>
   );
   const statistics = (
@@ -943,6 +1209,7 @@ export default function Workspace({
       ))}
     </div>
   );
+  const finance = financialTotals(realReviews);
   const chartReviews = realReviews.filter(
     (r) => reviewCurrency(r) === chartCurrency,
   );
@@ -1146,57 +1413,27 @@ export default function Workspace({
                   "Export all projects, contracts, review history and your saved hourly rate as JSON.",
                 )}
               </p>
-              <Button
-                disabled={disabled}
-                onClick={() =>
-                  void perform("Exporting…", async () => {
-                    const db = await database();
-                    try {
-                      const tx = db.transaction([
-                        "projects",
-                        "reviews",
-                        "settings",
-                        "chat",
-                      ]);
-                      const [p, r, s, c, chats] = await Promise.all([
-                        tx.objectStore("projects").getAll(),
-                        tx.objectStore("reviews").getAll(),
-                        tx.objectStore("settings").get("rate"),
-                        tx.objectStore("settings").get("currency"),
-                        tx.objectStore("chat").getAll(),
-                      ]);
-                      const url = URL.createObjectURL(
-                        new Blob(
-                          [
-                            JSON.stringify(
-                              {
-                                version: 2,
-                                projects: p,
-                                reviews: r,
-                                chats,
-                                rate: s ?? 100,
-                                currency: c ?? "USD",
-                              },
-                              null,
-                              2,
-                            ),
-                          ],
-                          { type: "application/json" },
-                        ),
-                      );
-                      const a = document.createElement("a");
-                      a.href = url;
-                      a.download = "scopeguard-workspace.json";
-                      a.click();
-                      setTimeout(() => URL.revokeObjectURL(url), 1000);
-                    } finally {
-                      db.close();
-                    }
-                  })
-                }
-              >
+              <Button disabled={disabled} onClick={() => void exportBackup()}>
                 <Download size={16} /> {t("Export workspace")}
               </Button>
+              <p>
+                {t(
+                  "Import adds missing projects and records; existing records are kept.",
+                )}
+              </p>
+              <label className="ws-upload">
+                <Upload size={18} /> {t("Import backup")}
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  disabled={disabled}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (file) void importBackup(file);
+                  }}
+                />
+              </label>
               <hr />
               {confirmDelete ? (
                 <>
@@ -1311,6 +1548,20 @@ export default function Workspace({
                     {reviews.filter((r) => r.project === p.id).length}
                   </small>
                   <pre>{p.contract}</pre>
+                  <ProjectVersions
+                    project={p}
+                    t={t}
+                    disabled={disabled}
+                    save={(text) => void saveContractVersion(p, text)}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={disabled}
+                    onClick={() => void exportBackup(p.id)}
+                  >
+                    {t("Back up project")}
+                  </Button>
                   <Button
                     disabled={disabled}
                     onClick={() => {
@@ -1327,7 +1578,7 @@ export default function Workspace({
         )}
         {ready && page === "dashboard" && (
           <>
-            {!projects.length && onboarding}
+            {!reviews.length && onboarding}
             {statistics}
             <Panel title={t("Recent reviews")} icon={<History />}>
               <div className="ws-actions">
@@ -1352,6 +1603,40 @@ export default function Workspace({
         {ready && page === "analytics" && (
           <>
             {statistics}
+            <Panel title={t("Revenue by currency")} icon={<Layers />}>
+              <p>
+                {t(
+                  "Potential includes detected work. Approved includes agreed work through payment. Received reflects recorded payments.",
+                )}
+              </p>
+              {finance.length ? (
+                <div className="ws-finance">
+                  {finance.map(
+                    ({ currency, potential, approved, received }) => (
+                      <div className="ws-finance-currency" key={currency}>
+                        <b>{currency}</b>
+                        <dl>
+                          <div>
+                            <dt>{t("Potential revenue")}</dt>
+                            <dd>{money(potential, currency)}</dd>
+                          </div>
+                          <div>
+                            <dt>{t("Approved revenue")}</dt>
+                            <dd>{money(approved, currency)}</dd>
+                          </div>
+                          <div>
+                            <dt>{t("Received revenue")}</dt>
+                            <dd>{money(received, currency)}</dd>
+                          </div>
+                        </dl>
+                      </div>
+                    ),
+                  )}
+                </div>
+              ) : (
+                <p>{t("No out-of-scope estimates yet.")}</p>
+              )}
+            </Panel>
             {currencyField(chartCurrency, setChartCurrency, "Chart currency")}
             {!chartReviews.some((r) => extraWork(r) > 0) && (
               <div className="ws-actions ws-empty-actions">
@@ -1609,6 +1894,55 @@ export default function Workspace({
                             {money(extraWork(detail), reviewCurrency(detail))}
                           </p>
 
+                          {!editFinding &&
+                            (detail.status === "out_of_scope" ||
+                              detail.work ||
+                              detail.agreement) && (
+                              <ExtraWork
+                                key={
+                                  detail.id +
+                                  "|" +
+                                  detail.rate +
+                                  "|" +
+                                  detail.hours +
+                                  "|" +
+                                  reviewCurrency(detail)
+                                }
+                                review={detail}
+                                t={t}
+                                money={money}
+                                disabled={disabled}
+                                generate={() => changeOrder(detail)}
+                                saveWork={(work) =>
+                                  void perform("Saving review…", async () => {
+                                    if (!validWork(work))
+                                      throw new MessageError(
+                                        "Enter valid agreed and received amounts. Paid work requires an amount received.",
+                                      );
+                                    await storeReview(
+                                      { ...detail, work },
+                                      "work",
+                                    );
+                                    setNotice("Work status saved.");
+                                  })
+                                }
+                                saveDraft={(agreement) =>
+                                  void perform("Saving review…", async () => {
+                                    await storeReview(
+                                      { ...detail, agreement },
+                                      "agreement",
+                                    );
+                                    setNotice("Draft saved.");
+                                  })
+                                }
+                                copy={(draft) =>
+                                  void perform("Copying…", async () => {
+                                    await navigator.clipboard.writeText(draft);
+                                    setNotice("Draft copied.");
+                                  })
+                                }
+                              />
+                            )}
                           {!editFinding && (
                             <Button
                               variant="ghost"
@@ -1742,7 +2076,13 @@ export default function Workspace({
                   <Panel title={t("View contract")} icon={<FileText />}>
                     <ContractText
                       contract={project.contract}
-                      evidence={turns.at(-1)?.answer.evidence}
+                      evidence={
+                        turns.findLast(
+                          (turn) =>
+                            (turn.version ?? 1) ===
+                            (project.versions?.length ?? 1),
+                        )?.answer.evidence
+                      }
                     />
                   </Panel>
                 </div>

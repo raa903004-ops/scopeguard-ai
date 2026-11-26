@@ -667,3 +667,54 @@
 .ws-task-estimates li p {
   margin: 0.25rem 0;
 }
+
+.ws-beta {
+  margin-block: 1rem;
+  padding-block: 0.8rem;
+  border-block-start: 1px solid var(--line);
+}
+.ws-beta h3 {
+  font-weight: 650;
+  margin: 0.8rem 0 0.45rem;
+}
+.ws-diff {
+  max-height: 23rem;
+  overflow: auto;
+  margin-block: 0.8rem;
+}
+.ws-diff li {
+  padding: 0.35rem 0.5rem;
+  border-inline-start: 3px solid transparent;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ws-diff li[data-change="added"] {
+  border-color: #31875f;
+  background: color-mix(in srgb, #31875f 18%, var(--panel));
+}
+.ws-diff li[data-change="removed"] {
+  border-color: #bd5252;
+  background: color-mix(in srgb, #bd5252 18%, var(--panel));
+}
+.ws-finance {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 0.75rem;
+}
+.ws-finance-currency {
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.ws-finance-currency dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  font-size: 0.86rem;
+}
+.ws-onboarding {
+  list-style: decimal;
+  padding-inline-start: 1.4rem;
+  margin-bottom: 0.9rem;
+}

@@ -1,5 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { Result } from "./engine.ts";
+import type { ContractVersion } from "./beta.ts";
 import type { Currency } from "./estimates.ts";
 import type { Review } from "./insights.tsx";
 
@@ -8,8 +9,9 @@ export type Project = {
   name: string;
   contract: string;
   synthetic?: boolean;
+  versions?: ContractVersion[];
 };
-export type ChatTurn = { question: string; answer: Result };
+export type ChatTurn = { question: string; answer: Result; version?: number };
 
 interface Store extends DBSchema {
   projects: { key: string; value: Project };

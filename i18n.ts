@@ -445,6 +445,74 @@ const ru = {
   "Est. speed: {speed} MiB/s": "Примерная скорость — {speed} МиБ/с",
   "Retry question": "Повторить вопрос",
   "Chat cleared.": "Чат очищен.",
+  "Extra work": "Дополнительные работы",
+  Detected: "Выявлено",
+  Approved: "Согласовано",
+  Completed: "Выполнено",
+  Invoiced: "Выставлен счёт",
+  Paid: "Оплачено",
+  Rejected: "Отклонено",
+  "Work status": "Статус работ",
+  "Agreed amount": "Согласованная сумма",
+  "Received amount": "Полученная сумма",
+  "Save work status": "Сохранить статус работ",
+  "Work status saved.": "Статус работ сохранён.",
+  "Enter valid agreed and received amounts. Paid work requires an amount received.":
+    "Укажите корректные суммы. Для оплаченной работы укажите полученную сумму.",
+  "Potential revenue": "Потенциальная выручка",
+  "Approved revenue": "Согласованная выручка",
+  "Received revenue": "Фактически получено",
+  "Revenue by currency": "Выручка по валютам",
+  "Potential includes detected work. Approved includes agreed work through payment. Received reflects recorded payments.":
+    "Потенциальная выручка включает выявленные работы. Согласованная — работы от согласования до оплаты. Фактическая — внесённые поступления.",
+  "Change order": "Дополнительное соглашение",
+  "Draft change order": "Черновик дополнительного соглашения",
+  "Generate draft": "Создать черновик",
+  "Save draft": "Сохранить черновик",
+  "Draft saved.": "Черновик сохранён.",
+  "Copy draft": "Скопировать черновик",
+  "Draft only. Review with the client before signing.":
+    "Черновик. Согласуйте его с клиентом перед подписанием.",
+  "Work description": "Описание работ",
+  "Contract basis": "Основание в договоре",
+  "Proposed price": "Предлагаемая стоимость",
+  "Schedule and payment terms: to be agreed by both parties.":
+    "Сроки и условия оплаты согласуются сторонами.",
+  "Client signature: ____________________":
+    "Подпись клиента ____________________",
+  "Provider signature: ____________________":
+    "Подпись исполнителя ____________________",
+  "Contract versions": "Версии договора",
+  Version: "Версия",
+  "Compare from": "Сравнить с версией",
+  "Compare to": "Сравнить до версии",
+  "No changes between these versions.": "Между этими версиями изменений нет.",
+  "Save new version": "Сохранить новую версию",
+  "Enter changed contract text.": "Введите изменённый текст договора.",
+  "Contract version saved.": "Версия договора сохранена.",
+  "The contract changed in another tab. Reopen the project and try again.":
+    "Договор изменён в другой вкладке. Откройте проект заново и повторите попытку.",
+  Added: "Добавлено",
+  Removed: "Удалено",
+  "Back up project": "Скачать копию проекта",
+  "Import backup": "Импортировать резервную копию",
+  "Import adds missing projects and records; existing records are kept.":
+    "Импорт добавляет отсутствующие проекты и записи, сохраняя текущие данные.",
+  "Invalid or unsupported ScopeGuard backup.":
+    "Файл резервной копии ScopeGuard повреждён или имеет неподдерживаемый формат.",
+  "Backup project conflicts with an existing project.":
+    "Проект из копии конфликтует с существующим проектом.",
+  "Importing backup…": "Импорт резервной копии…",
+  "Backup imported.": "Резервная копия импортирована.",
+  "Getting started": "Начало работы",
+  "Add a contract or load the sample.":
+    "Добавьте договор или загрузите учебный пример.",
+  "Analyze a client request and verify its contract quote.":
+    "Проверьте запрос клиента и сверьте цитату с договором.",
+  "Track approval, invoicing and payment as work progresses.":
+    "Отмечайте согласование, выставление счёта и оплату по мере работы.",
+  "Retrying the model response…": "Повторная попытка получить ответ модели…",
+  "Draft copied.": "Черновик скопирован.",
 };
 
 export type Message = keyof typeof ru;

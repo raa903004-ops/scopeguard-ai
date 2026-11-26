@@ -1,3 +1,9 @@
+import {
+  compareContracts,
+  financialTotals,
+  parseBackup,
+  validWork,
+} from "./beta.ts";
 import { upgradeWorkspace } from "./workspace-db.ts";
 import { extractHourlyRate, hourRange } from "./estimates.ts";
 import test from "node:test";
@@ -7,6 +13,7 @@ import {
   analyze,
   analysisPrompt,
   contractClauses,
+  collectValidated,
   groundedResult,
   validateGenerated,
   compatibleModels,
@@ -58,7 +65,7 @@ test("starts with the lightest compatible model and prefers a reusable model", (
 
 const contract = "Hosting is excluded.";
 const result = {
-  status: "out_of_scope",
+  status: "out_of_scope" as const,
   reasoning: "The request adds hosting.",
   evidence: contract,
   hours: 1.5,
@@ -315,5 +322,137 @@ test("chat can recover a clause only when its answer is the exact clause", () =>
       true,
     ).evidence,
     "",
+  );
+});
+
+test("financial totals separate currency, estimates, agreement and cash", () => {
+  const review = {
+    ...result,
+    id: "review",
+    project: "p",
+    name: "Client",
+    contract,
+    request: "Add hosting.",
+    rate: 100,
+    source: "Manual",
+    created: "2026-01-01T00:00:00Z",
+  } as const;
+  const paid = {
+    status: "paid",
+    amount: 125,
+    received: 110,
+    currency: "EUR",
+  } as const;
+  assert.ok(validWork(paid));
+  assert.equal(validWork({ ...paid, received: 0 }), false);
+  assert.deepEqual(
+    financialTotals([
+      review,
+      { ...review, work: paid },
+      { ...review, synthetic: true },
+      {
+        ...review,
+        work: { status: "rejected", amount: 140, received: 0, currency: "RUB" },
+      },
+    ]),
+    [
+      { currency: "USD", potential: 150, approved: 0, received: 0 },
+      { currency: "EUR", potential: 0, approved: 125, received: 110 },
+    ],
+  );
+});
+
+test("contract diff keeps unchanged text and detects changes in spacing", () => {
+  const changes = compareContracts(
+    "Intro. Old rate. Shared. Old terms.",
+    "Intro. New rate. Shared. New terms.",
+  );
+  assert.deepEqual(
+    changes.map((r) => r.type),
+    ["removed", "added", "same", "removed", "added"],
+  );
+  assert.ok(
+    compareContracts("Part one. Part two.", "Part one.\nPart two.").length,
+  );
+  assert.deepEqual(compareContracts(contract, contract), []);
+});
+
+test("validates backup relationships, historic evidence and chat versions", () => {
+  const project = {
+    id: "p",
+    name: "Client",
+    contract: "Hosting is included.",
+    versions: [{ text: contract }, { text: "Hosting is included." }],
+  };
+  const review = {
+    ...result,
+    id: "r",
+    project: "p",
+    name: "Client",
+    contract,
+    request: "Add hosting.",
+    rate: 100,
+    source: "Manual",
+    created: "2026-01-01T00:00:00Z",
+    agreement: "Editable agreement.",
+  };
+  const chat = {
+    project: "p",
+    turns: [{ question: "Is hosting included?", answer: result, version: 1 }],
+  };
+  const payload = {
+    version: 3,
+    projects: [project],
+    reviews: [review],
+    chats: [chat],
+  };
+  const parsed = parseBackup(JSON.stringify(payload));
+  assert.equal(parsed.reviews[0].agreement, "Editable agreement.");
+  assert.equal(parsed.chats[0].turns[0].answer.evidence, contract);
+  assert.equal(
+    parseBackup(
+      JSON.stringify({
+        version: 1,
+        projects: [{ id: "old", name: "Legacy", contract }],
+        reviews: [],
+      }),
+    ).chats.length,
+    0,
+  );
+  for (const broken of [
+    { ...payload, reviews: [{ ...review, evidence: "Invented text." }] },
+    { ...payload, reviews: [{ ...review, project: "missing" }] },
+    {
+      ...payload,
+      chats: [{ ...chat, turns: [{ ...chat.turns[0], version: 2 }] }],
+    },
+    { ...payload, projects: [project, project] },
+  ])
+    assert.throws(
+      () => parseBackup(JSON.stringify(broken)),
+      /Invalid or unsupported ScopeGuard backup/,
+    );
+});
+
+test("retries malformed model results once and never retries transport errors", async () => {
+  const attempts: boolean[] = [];
+  const output = await collectValidated(
+    async (retry) => {
+      attempts.push(retry);
+      return retry ? '{"ok":true}' : "{invalid";
+    },
+    (raw) => JSON.parse(raw),
+  );
+  assert.deepEqual(output, { ok: true });
+  assert.deepEqual(attempts, [false, true]);
+  await assert.rejects(
+    collectValidated(
+      async (retry) => {
+        assert.equal(retry, false);
+        throw new Error("transport failure");
+      },
+      (value) => value,
+    ),
+    /transport failure/,
   );
 });

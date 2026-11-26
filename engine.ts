@@ -412,6 +412,20 @@ const reviewSchema = {
 let engine: MLCEngine | undefined;
 export const isModelLoaded = () => engine !== undefined;
 let working = false;
+export async function collectValidated<T, U>(
+  generate: (retry: boolean) => Promise<T>,
+  decode: (response: T) => U,
+): Promise<U> {
+  const first = await generate(false);
+  try {
+    return decode(first);
+  } catch (error) {
+    if (!(error instanceof MessageError || error instanceof SyntaxError))
+      throw error;
+    return decode(await generate(true));
+  }
+}
+
 export async function analyze(
   contract: string,
   request: string,
@@ -458,46 +472,75 @@ export async function analyze(
     engine ??= await initialize(onProgress, signal);
     signal?.throwIfAborted();
     signal?.addEventListener("abort", stop, { once: true });
-    onProgress("Comparing the request with the contract…");
-    const response = await engine.chat.completions.create({
-      messages: [
-        {
-          role: "system",
-          content: analysisPrompt(language, chat),
-        },
-        { role: "user", content: data },
-      ],
-      response_format: {
-        type: "json_object",
-        schema: JSON.stringify({
-          ...schema,
-          properties: {
-            ...schema.properties,
-            clause: { ...schema.properties.clause, maximum: clauses.length },
+    const runningEngine = engine;
+    return await collectValidated(
+      async (retry) => {
+        signal?.throwIfAborted();
+        onProgress(
+          retry
+            ? "Retrying the model response…"
+            : "Comparing the request with the contract…",
+        );
+        const response = await runningEngine.chat.completions.create({
+          messages: [
+            {
+              role: "system",
+              content:
+                analysisPrompt(language, chat) +
+                (retry
+                  ? " Correct the previous malformed result. Provide nonempty localized explanations, valid numeric ranges and a clause number from the input."
+                  : ""),
+            },
+            { role: "user", content: data },
+          ],
+          response_format: {
+            type: "json_object",
+            schema: JSON.stringify({
+              ...schema,
+              properties: {
+                ...schema.properties,
+                clause: {
+                  ...schema.properties.clause,
+                  maximum: clauses.length,
+                },
+              },
+            }),
           },
-        }),
+          max_tokens: chat ? 512 : 1024,
+          temperature: retry ? 0.15 : 0,
+        });
+        signal?.throwIfAborted();
+        return response;
       },
-      max_tokens: chat ? 512 : 1024,
-      temperature: 0,
-    });
-    signal?.throwIfAborted();
-    const choice = response.choices[0];
-    if (choice?.finish_reason !== "stop" || !choice.message.content)
-      throw new MessageError(
-        "The model returned an incomplete review. Retry with a shorter excerpt or review manually.",
-      );
-    return groundedResult(
-      JSON.parse(choice.message.content),
-      clauses,
-      reviewedText,
-      language,
-      chat,
+      (response) => {
+        const choice = response.choices[0];
+        if (choice?.finish_reason !== "stop" || !choice.message.content)
+          throw new MessageError(
+            "The model returned an incomplete review. Retry with a shorter excerpt or review manually.",
+          );
+        return groundedResult(
+          JSON.parse(choice.message.content),
+          clauses,
+          reviewedText,
+          language,
+          chat,
+        );
+      },
     );
   } catch (error) {
     if (signal?.aborted) throw new MessageError("Analysis stopped.");
     if (error instanceof MessageError) throw error;
+    if (
+      error instanceof Error &&
+      /device.?lost|out of memory/i.test(error.name + " " + error.message)
+    ) {
+      const failed = engine;
+      engine = undefined;
+      await failed?.unload().catch(() => undefined);
+    }
     throw new MessageError(
       "Could not run the local model. Try again or use manual review.",
+      error instanceof Error ? error.message : undefined,
     );
   } finally {
     signal?.removeEventListener("abort", stop);
