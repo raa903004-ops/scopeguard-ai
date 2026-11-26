@@ -552,6 +552,10 @@ const ru = {
     "Оценка не подтверждена: модель не сослалась на договор.",
   "The app sends no usage telemetry and requires no account. Hosting and model providers receive ordinary connection information when serving public files. GitHub feedback is public and may require an account.":
     "Приложение не отправляет телеметрию и не требует аккаунта. При загрузке публичных файлов хостинг и поставщики моделей получают обычные данные подключения. Обратная связь на GitHub публична и может требовать аккаунт.",
+  "The model decision conflicts with the cited clause.":
+    "Решение модели противоречит цитате из договора.",
+  "The AI estimate could not be verified. Review the request and contract manually.":
+    "Оценку ИИ не удалось подтвердить. Сверьте запрос и договор вручную.",
 };
 
 export type Message = keyof typeof ru;

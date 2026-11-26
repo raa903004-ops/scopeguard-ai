@@ -488,3 +488,27 @@ test("retries a definite AI decision with no citation before downgrading it", ()
   assert.equal(review.hours, 0);
   assert.equal(review.tasks, undefined);
 });
+test("never accepts a definite decision contradicted by its exact citation", () => {
+  const row = {
+    ...result,
+    status: "in_scope",
+    clause: 1,
+    tasks: [
+      {
+        task: "Hosting",
+        minHours: 1,
+        maxHours: 2,
+        assumptions: "One site only.",
+      },
+    ],
+  };
+  assert.throws(
+    () => groundedResult(row, [contract], contract, "en", false, true),
+    /conflicts with the cited clause/,
+  );
+  const review = groundedResult(row, [contract], contract, "en", false);
+  assert.equal(review.status, "uncertain");
+  assert.equal(review.evidence, contract);
+  assert.equal(review.hours, 0);
+  assert.equal(review.tasks, undefined);
+});

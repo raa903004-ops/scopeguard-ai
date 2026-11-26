@@ -164,18 +164,41 @@ export function groundedResult(
       : literalAnswer && clauses.includes(literalAnswer)
         ? literalAnswer
         : "";
+  // A direct contradiction is unsafe to bill even when its quotation is exact.
+  const excluded =
+    /\b(?:excluded|not included|not covered|billed separately|out of scope)\b|исключ[её]н|не входит|не включ[её]н|оплачивается отдельно/iu.test(
+      evidence,
+    );
+  const included =
+    !excluded &&
+    /\b(?:is included|are included|is covered|are covered)\b|входит в объ[её]м|включ[её]н в объ[её]м/iu.test(
+      evidence,
+    );
+  const contradiction =
+    !chat &&
+    ((excluded && output.status === "in_scope") ||
+      (included && output.status === "out_of_scope"));
+  if (retryUncited && contradiction)
+    throw new MessageError(
+      "The model decision conflicts with the cited clause.",
+    );
   const result = validateGenerated(
     {
       ...output,
       ...(chat ? { hours: 0, tasks: undefined } : {}),
-      status: !evidence ? "uncertain" : chat ? "in_scope" : output.status,
+      status:
+        !evidence || contradiction
+          ? "uncertain"
+          : chat
+            ? "in_scope"
+            : output.status,
       evidence,
     },
     contract,
     language,
     chat,
   );
-  return !chat && !evidence
+  return !chat && (!evidence || contradiction)
     ? { ...result, hours: 0, tasks: undefined }
     : result;
 }

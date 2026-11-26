@@ -1880,11 +1880,11 @@ export default function Workspace({
                           )}
                           {detail.source === "Local AI" &&
                             detail.status === "uncertain" &&
-                            !detail.evidence &&
+                            !detail.tasks &&
                             !detail.edited && (
                               <p>
                                 {t(
-                                  "No estimate was confirmed because the model did not cite the contract.",
+                                  "The AI estimate could not be verified. Review the request and contract manually.",
                                 )}
                               </p>
                             )}
