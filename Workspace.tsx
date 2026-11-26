@@ -6,7 +6,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { openDB, type DBSchema } from "idb";
+import { database, type ChatTurn, type Project } from "./workspace-db";
 import {
   Archive,
   Check,
@@ -26,6 +26,7 @@ import {
   analyze,
   hasGPU,
   isModelLoaded,
+  type ModelTransfer,
   readFile,
   revenue,
   validate,
@@ -66,25 +67,6 @@ import {
 } from "./estimates";
 import "./workspace.css";
 
-type Project = {
-  id: string;
-  name: string;
-  contract: string;
-  synthetic?: boolean;
-};
-interface Store extends DBSchema {
-  projects: { key: string; value: Project };
-  reviews: { key: string; value: Review };
-  settings: { key: string; value: number | Currency };
-}
-const database = () =>
-  openDB<Store>("scopeguard-workspace", 1, {
-    upgrade(db) {
-      db.createObjectStore("projects", { keyPath: "id" });
-      db.createObjectStore("reviews", { keyPath: "id" });
-      db.createObjectStore("settings");
-    },
-  });
 const requiredField = "Fill in this field.";
 const invalidNumber = "Enter a valid number within the allowed range.";
 const blankReview: Result = {
@@ -205,6 +187,9 @@ export default function Workspace({
   const [manual, setManual] = useState<Result>({ ...blankReview });
   const [activity, setActivity] = useState<Message>();
   const [progress, setProgress] = useState<number>();
+  const [transfer, setTransfer] = useState<ModelTransfer>();
+  const [ambiguousCurrency, setAmbiguousCurrency] = useState<Currency | "">("");
+  const [retryChat, setRetryChat] = useState(false);
   const [error, setError] = useState<MessageError>();
   const [notice, setNotice] = useState<Message>();
   const [detail, setDetail] = useState<Review>();
@@ -228,9 +213,7 @@ export default function Workspace({
   const [historyQuery, setHistoryQuery] = useState("");
   const [historyStatus, setHistoryStatus] = useState<Result["status"] | "">("");
   const [question, setQuestion] = useState("");
-  const [chats, setChats] = useState<
-    Record<string, { question: string; answer: Result }[]>
-  >({});
+  const [chats, setChats] = useState<Record<string, ChatTurn[]>>({});
   const [batchStep, setBatchStep] = useState<{
     current: number;
     total: number;
@@ -246,24 +229,36 @@ export default function Workspace({
   const realReviews = reviews.filter(
     (row) => !row.synthetic && realProjectIds.has(row.project),
   );
-  const updateProgress = (message: Message, fraction?: number) => {
+  const updateProgress = (
+    message: Message,
+    fraction?: number,
+    modelTransfer?: ModelTransfer,
+  ) => {
     if (activeAnalysis.current?.signal.aborted) return;
     setActivity(message);
     setProgress(fraction);
+    setTransfer(modelTransfer);
   };
   useEffect(() => {
     let active = true;
     const init = async () => {
       const db = await database();
       try {
-        const [ps, rs, defaultRate, defaultCurrency] = await Promise.all([
-          db.getAll("projects"),
-          db.getAll("reviews"),
-          db.get("settings", "rate"),
-          db.get("settings", "currency"),
-        ]);
+        const [ps, rs, defaultRate, defaultCurrency, storedChats] =
+          await Promise.all([
+            db.getAll("projects"),
+            db.getAll("reviews"),
+            db.get("settings", "rate"),
+            db.get("settings", "currency"),
+            db.getAll("chat"),
+          ]);
         if (active) {
           setProjects(ps);
+          setChats(
+            Object.fromEntries(
+              storedChats.map((row) => [row.project, row.turns]),
+            ),
+          );
           select(ps[0]?.id || "");
           setReviews(rs.sort((a, b) => b.created.localeCompare(a.created)));
           defaultTerms.current = {
@@ -314,6 +309,7 @@ export default function Workspace({
     } finally {
       setActivity(undefined);
       setProgress(undefined);
+      setTransfer(undefined);
       setBatchStep(undefined);
       activeAnalysis.current = null;
       setStopping(false);
@@ -334,6 +330,8 @@ export default function Workspace({
   }
   function choose(p: Project) {
     select(p.id);
+    setAmbiguousCurrency("");
+    setRetryChat(false);
     setRate(defaultTerms.current.rate);
     setCurrency(defaultTerms.current.currency);
     setEditFinding(undefined);
@@ -522,26 +520,58 @@ export default function Workspace({
   async function askContract(event: FormEvent) {
     event.preventDefault();
     if (!project || !gpu || !question.trim()) return;
+    setRetryChat(false);
     await perform("Preparing local model…", async () => {
       const asked = question.trim();
       const controller = new AbortController();
       activeAnalysis.current = controller;
-      const answer = await analyze(
-        project.contract,
-        asked,
-        updateProgress,
-        excerpt,
-        language,
-        {
-          previousQuestions: turns.slice(-2).map((turn) => turn.question),
-          signal: controller.signal,
-        },
-      );
-      setChats((all) => ({
-        ...all,
-        [project.id]: [...(all[project.id] ?? []), { question: asked, answer }],
-      }));
+      let answer: Result;
+      try {
+        answer = await analyze(
+          project.contract,
+          asked,
+          updateProgress,
+          excerpt,
+          language,
+          {
+            previousQuestions: turns.slice(-2).map((turn) => turn.question),
+            signal: controller.signal,
+          },
+        );
+      } catch (error) {
+        setRetryChat(true);
+        throw error;
+      }
+      const db = await database();
+      let saved: ChatTurn[];
+      try {
+        const tx = db.transaction(["projects", "chat"], "readwrite");
+        if (!(await tx.objectStore("projects").getKey(project.id)))
+          throw new MessageError(
+            "This project was deleted while the review was running.",
+          );
+        const existing = await tx.objectStore("chat").get(project.id);
+        saved = [...(existing?.turns ?? []), { question: asked, answer }];
+        await tx.objectStore("chat").put({ project: project.id, turns: saved });
+        await tx.done;
+      } finally {
+        db.close();
+      }
+      setChats((all) => ({ ...all, [project.id]: saved }));
       setQuestion("");
+    });
+  }
+
+  async function clearChat(projectId: string) {
+    await perform("Deleting…", async () => {
+      const db = await database();
+      try {
+        await db.delete("chat", projectId);
+      } finally {
+        db.close();
+      }
+      setChats((all) => ({ ...all, [projectId]: [] }));
+      setNotice("Chat cleared.");
     });
   }
 
@@ -1032,6 +1062,21 @@ export default function Workspace({
         {feedback && (
           <p className="ws-notice" role="status">
             {t(feedback)}
+            {transfer && (
+              <span className="ws-error-detail">
+                {transfer.model} ·{" "}
+                {interpolate(t("Model weights: {size} MiB"), {
+                  size: number.format(Math.round(transfer.mebibytes)),
+                })}
+                {transfer.speed !== undefined &&
+                  " · " +
+                    interpolate(t("Est. speed: {speed} MiB/s"), {
+                      speed: new Intl.NumberFormat(locale[language], {
+                        maximumFractionDigits: 2,
+                      }).format(transfer.speed),
+                    })}
+              </span>
+            )}
             {batchStep && (
               <>
                 {" "}
@@ -1111,21 +1156,24 @@ export default function Workspace({
                         "projects",
                         "reviews",
                         "settings",
+                        "chat",
                       ]);
-                      const [p, r, s, c] = await Promise.all([
+                      const [p, r, s, c, chats] = await Promise.all([
                         tx.objectStore("projects").getAll(),
                         tx.objectStore("reviews").getAll(),
                         tx.objectStore("settings").get("rate"),
                         tx.objectStore("settings").get("currency"),
+                        tx.objectStore("chat").getAll(),
                       ]);
                       const url = URL.createObjectURL(
                         new Blob(
                           [
                             JSON.stringify(
                               {
-                                version: 1,
+                                version: 2,
                                 projects: p,
                                 reviews: r,
+                                chats,
                                 rate: s ?? 100,
                                 currency: c ?? "USD",
                               },
@@ -1165,13 +1213,14 @@ export default function Workspace({
                           const db = await database();
                           try {
                             const tx = db.transaction(
-                              ["projects", "reviews", "settings"],
+                              ["projects", "reviews", "settings", "chat"],
                               "readwrite",
                             );
                             await Promise.all([
                               tx.objectStore("projects").clear(),
                               tx.objectStore("reviews").clear(),
                               tx.objectStore("settings").clear(),
+                              tx.objectStore("chat").clear(),
                               tx.done,
                             ]);
                           } finally {
@@ -1427,18 +1476,51 @@ export default function Workspace({
                             <div className="ws-rate-suggestion">
                               <strong>
                                 {t("Contract rate suggestion")} ·{" "}
-                                {money(
-                                  rateSuggestion.rate,
-                                  rateSuggestion.currency,
-                                )}
+                                {rateSuggestion.currency
+                                  ? money(
+                                      rateSuggestion.rate,
+                                      rateSuggestion.currency,
+                                    )
+                                  : number.format(rateSuggestion.rate)}
                               </strong>
                               <blockquote>{rateSuggestion.evidence}</blockquote>
+                              {!rateSuggestion.currency && (
+                                <label>
+                                  {t(
+                                    "Choose currency to confirm the contract rate.",
+                                  )}
+                                  <select
+                                    value={ambiguousCurrency}
+                                    onChange={(e) =>
+                                      setAmbiguousCurrency(
+                                        e.target.value as Currency | "",
+                                      )
+                                    }
+                                  >
+                                    <option value="">
+                                      {t("Select currency")}
+                                    </option>
+                                    {currencies.map((code) => (
+                                      <option key={code}>{code}</option>
+                                    ))}
+                                  </select>
+                                </label>
+                              )}
                               <Button
                                 type="button"
                                 variant="outline"
+                                disabled={
+                                  !(
+                                    rateSuggestion.currency || ambiguousCurrency
+                                  )
+                                }
                                 onClick={() => {
+                                  const confirmed =
+                                    rateSuggestion.currency ||
+                                    ambiguousCurrency;
+                                  if (!confirmed) return;
                                   setRate(String(rateSuggestion.rate));
-                                  setCurrency(rateSuggestion.currency);
+                                  setCurrency(confirmed);
                                 }}
                               >
                                 {t("Use contract rate")}
@@ -1511,15 +1593,17 @@ export default function Workspace({
                               language={language}
                             />
                           )}
-                          <b>
-                            {number.format(detail.hours)} {t("h")} ×{" "}
-                            {money(detail.rate, reviewCurrency(detail))} /{" "}
-                            {t("h")} ={" "}
-                            {money(
-                              revenue(detail.hours, detail.rate),
-                              reviewCurrency(detail),
-                            )}
-                          </b>
+                          {detail.status === "out_of_scope" && (
+                            <b>
+                              {number.format(detail.hours)} {t("h")} ×{" "}
+                              {money(detail.rate, reviewCurrency(detail))} /{" "}
+                              {t("h")} ={" "}
+                              {money(
+                                revenue(detail.hours, detail.rate),
+                                reviewCurrency(detail),
+                              )}
+                            </b>
+                          )}
                           <p>
                             {t("Estimated extra work")} ·{" "}
                             {money(extraWork(detail), reviewCurrency(detail))}
@@ -1704,21 +1788,22 @@ export default function Workspace({
                         />
                       </label>
                       <div className="ws-actions">
-                        <Button>{t("Ask locally")}</Button>
-                        {turns.length > 0 && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            onClick={() =>
-                              setChats((all) => ({ ...all, [selected]: [] }))
-                            }
-                          >
-                            {t("Clear chat")}
-                          </Button>
-                        )}
+                        <Button>
+                          {t(retryChat ? "Retry question" : "Ask locally")}
+                        </Button>
                       </div>
                     </fieldset>
                   </form>
+                  {turns.length > 0 && (
+                    <Button
+                      disabled={disabled}
+                      type="button"
+                      variant="ghost"
+                      onClick={() => void clearChat(selected)}
+                    >
+                      {t("Clear chat")}
+                    </Button>
+                  )}
                 </Panel>
               </div>
             </>

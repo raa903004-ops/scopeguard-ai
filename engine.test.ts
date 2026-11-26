@@ -1,3 +1,4 @@
+import { upgradeWorkspace } from "./workspace-db.ts";
 import { extractHourlyRate, hourRange } from "./estimates.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -5,6 +6,8 @@ import { prebuiltAppConfig } from "@mlc-ai/web-llm";
 import {
   analyze,
   analysisPrompt,
+  contractClauses,
+  groundedResult,
   validateGenerated,
   compatibleModels,
   readFile,
@@ -12,21 +15,44 @@ import {
   validate,
 } from "./engine.ts";
 
-test("orders installed models that can run without shader-f16", () => {
-  const preferred = "SmolLM3-3B-q4f32_1-MLC";
+test("starts with the lightest compatible model and prefers a reusable model", () => {
+  const f32 = "Qwen2.5-0.5B-Instruct-q4f32_1-MLC";
+  const f16 = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
   const fallback = "Llama-3.2-1B-Instruct-q4f32_1-MLC";
+  const large = "SmolLM3-3B-q4f32_1-MLC";
   const catalog = prebuiltAppConfig.model_list;
-  assert.deepEqual(compatibleModels(catalog, new Set()), [preferred, fallback]);
-  const requiringF16 = catalog.map((model) =>
-    model.model_id === preferred
-      ? { ...model, required_features: ["shader-f16"] }
-      : model,
-  );
-  assert.deepEqual(compatibleModels(requiringF16, new Set()), [fallback]);
-  assert.deepEqual(compatibleModels(requiringF16, new Set(["shader-f16"])), [
-    preferred,
+  assert.deepEqual(compatibleModels(catalog, new Set()), [
+    f32,
     fallback,
+    large,
   ]);
+  assert.deepEqual(compatibleModels(catalog, new Set(["shader-f16"])), [
+    f16,
+    f32,
+    fallback,
+    large,
+  ]);
+  assert.deepEqual(compatibleModels(catalog, new Set(), f16), [
+    f32,
+    fallback,
+    large,
+  ]);
+  assert.deepEqual(compatibleModels(catalog, new Set(), fallback), [
+    fallback,
+    f32,
+    large,
+  ]);
+  assert.deepEqual(
+    compatibleModels(
+      catalog.map((model) =>
+        model.model_id === f32
+          ? { ...model, required_features: ["shader-f16"] }
+          : model,
+      ),
+      new Set(),
+    ),
+    [fallback, large],
+  );
   assert.deepEqual(compatibleModels([], new Set()), []);
 });
 
@@ -175,5 +201,95 @@ test("localizes generated reasoning and assumptions but preserves quotes verbati
         "ru",
       ),
     /Evidence must match/,
+  );
+});
+
+test("rejects negative, unsupported, ambiguous and non-hourly clauses", () => {
+  for (const clause of [
+    "CAD pricing: $100/hour",
+    "£100/hour",
+    "100 JPY per hour",
+    "AUD $100/hour",
+    "CAD pricing:\n$100/hour",
+    "Hourly rate: EUR 80/day",
+    "Hourly rate: EUR 80 per day",
+    "Hourly rate: EUR 80/8 hours",
+    "Rate: - €100/hour",
+    "Hourly rate: − EUR 100",
+    "Hourly rate: - EUR 100",
+    "€1,2,3/hour",
+  ])
+    assert.equal(extractHourlyRate(clause), undefined, clause);
+  assert.deepEqual(extractHourlyRate("$100/hour"), {
+    rate: 100,
+    currency: null,
+    evidence: "$100/hour",
+  });
+  assert.deepEqual(extractHourlyRate("US$100/hour"), {
+    rate: 100,
+    currency: "USD",
+    evidence: "US$100/hour",
+  });
+});
+
+test("rejects punctuation quotes and unsafe task totals before billing", () => {
+  assert.throws(
+    () => validate({ ...result, evidence: "." }, contract),
+    /Evidence must match/,
+  );
+  assert.throws(
+    () => validate({ ...result, evidence: " ", status: "uncertain" }, contract),
+    /Evidence must match/,
+  );
+  const task = {
+    task: "Hosting",
+    minHours: 20000,
+    maxHours: 60000,
+    assumptions: "One site only.",
+  };
+  assert.throws(
+    () => validate({ ...result, tasks: [task, task] }, contract),
+    /Invalid task estimates/,
+  );
+  assert.throws(() => revenue(1, -100), /valid rate/);
+  assert.throws(() => revenue(1, 1e308), /valid rate/);
+});
+
+test("selects only verbatim clauses, with no chargeable decision for absent evidence", () => {
+  const text = "Hosting is excluded.\nThe rate is USD 125.50 per hour.";
+  const clauses = contractClauses(text);
+  assert.deepEqual(clauses, [
+    "Hosting is excluded.",
+    "The rate is USD 125.50 per hour.",
+  ]);
+  const row = { ...result, clause: 1, evidence: "Invented" };
+  assert.equal(
+    groundedResult(row, clauses, text, "en", true).evidence,
+    contract,
+  );
+  assert.equal(
+    groundedResult({ ...row, clause: 0 }, clauses, text, "en", true).status,
+    "uncertain",
+  );
+  assert.throws(
+    () => groundedResult({ ...row, clause: 9 }, clauses, text, "en", true),
+    /Evidence must match/,
+  );
+});
+
+test("upgrading a v1 workspace adds only the project chat store", () => {
+  const calls: [string, IDBObjectStoreParameters | undefined][] = [];
+  const db = {
+    createObjectStore(name: string, options?: IDBObjectStoreParameters) {
+      calls.push([name, options]);
+    },
+  };
+  upgradeWorkspace(db as Parameters<typeof upgradeWorkspace>[0], 1);
+  assert.deepEqual(calls, [["chat", { keyPath: "project" }]]);
+  calls.length = 0;
+  upgradeWorkspace(db as Parameters<typeof upgradeWorkspace>[0], 0);
+  assert.deepEqual(
+    calls.map(([store]) => store),
+    ["projects", "reviews", "settings", "chat"],
   );
 });

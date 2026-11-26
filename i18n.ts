@@ -437,6 +437,14 @@ const ru = {
   "Total range": "Общий диапазон",
   "Midpoint estimate": "Оценка по середине диапазона",
   "Chart currency": "Валюта графиков",
+  "Choose currency to confirm the contract rate.":
+    "Выберите валюту, чтобы подтвердить ставку из договора.",
+  "Select currency": "Выберите валюту",
+  "Loading cached model…": "Загрузка модели из кэша…",
+  "Model weights: {size} MiB": "Веса модели — {size} МиБ",
+  "Est. speed: {speed} MiB/s": "Примерная скорость — {speed} МиБ/с",
+  "Retry question": "Повторить вопрос",
+  "Chat cleared.": "Чат очищен.",
 };
 
 export type Message = keyof typeof ru;
