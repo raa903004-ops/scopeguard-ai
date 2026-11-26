@@ -17,7 +17,9 @@ import { isWorkspaceView } from "./workspace-nav";
 import { Button } from "./button";
 import { translate, type Language } from "./i18n";
 const privacyPage = location.pathname.endsWith("/privacy.html");
-const homeLink = privacyPage ? "./" : "";
+const feedbackPage = location.pathname.endsWith("/feedback.html");
+const publicPage = privacyPage || feedbackPage;
+const homeLink = publicPage ? "./" : "";
 const issues = "https://github.com/raa903004-ops/scopeguard-ai/issues";
 
 function current() {
@@ -45,37 +47,51 @@ function Pricing({ language }: { language: Language }) {
       <div className="price-heading">
         <span className="eyeline">{t("PRICING")}</span>
         <h1>
-          {t("One workspace.")}
+          {t("Try ScopeGuard free")}
           <br />
-          {t("Zero subscription.")}
+          {t("Optional Pro is planned")}
         </h1>
-        <p>
-          {t("Review contracts privately with the free early access edition.")}
-        </p>
+        <p>{t("Use the free beta now. Pro is optional and planned.")}</p>
       </div>
-      <section className="price-card">
-        <LockKeyhole />
-        <h2>{t("Local workspace")}</h2>
-        <div className="price">
-          $0 <small>{t("/ month")}</small>
-        </div>
-        <ul>
-          {[
-            t("Unlimited local projects"),
-            t("On-device AI and manual review"),
-            t("Exact contract evidence"),
-            t("Client email drafts and JSON export"),
-          ].map((f) => (
-            <li key={f}>
-              <Check size={16} />
-              {f}
-            </li>
-          ))}
-        </ul>
-        <a href="#dashboard" className="nav-cta">
-          {t("Try free")}
-        </a>
-      </section>
+      <div className="pricing-options">
+        <section className="price-card">
+          <LockKeyhole />
+          <h2>{t("Free beta")}</h2>
+          <div className="price">
+            $0 <small>{t("/ month")}</small>
+          </div>
+          <ul>
+            {[
+              t("Unlimited local projects"),
+              t("On-device AI and manual review"),
+              t("Exact contract evidence"),
+              t("Client email drafts and JSON export"),
+            ].map((f) => (
+              <li key={f}>
+                <Check size={16} />
+                {f}
+              </li>
+            ))}
+          </ul>
+          <a href="#dashboard" className="nav-cta">
+            {t("Try free")}
+          </a>
+        </section>
+        <section className="price-card">
+          <h2>
+            Pro <small>{t("Planned")}</small>
+          </h2>
+          <p>{t("Price to be announced")}</p>
+          <p>
+            {t(
+              "Pro is not available for purchase. Share what you need from it on GitHub.",
+            )}
+          </p>
+          <a className="sg-button sg-outline" href="./feedback.html">
+            {t("Register interest in Pro")}
+          </a>
+        </section>
+      </div>
     </main>
   );
 }
@@ -109,10 +125,58 @@ function Privacy({ language }: { language: Language }) {
           <p>{t(copy)}</p>
         </section>
       ))}
+      <p>
+        {t(
+          "Chat history, contract versions, extra-work records and drafts are also stored in this browser. Download a backup before clearing site data or switching devices.",
+        )}
+      </p>
+      <p>
+        {t(
+          "The app sends no usage telemetry and requires no account. Hosting and model providers receive ordinary connection information when serving public files. GitHub feedback is public and may require an account.",
+        )}
+      </p>
+      <a className="sg-button sg-outline" href="./feedback.html">
+        {t("Feedback")}
+      </a>
     </main>
   );
 }
 
+function Feedback({ language }: { language: Language }) {
+  const t = translate(language);
+  return (
+    <main className="sg-feature-section policy">
+      <h1>{t("Share feedback or report a bug")}</h1>
+      <p>
+        {t(
+          "Send reproducible steps and your browser version so the issue can be investigated.",
+        )}
+      </p>
+      <p>
+        {t(
+          "Feedback and bug reports are public on GitHub. Leave out client names, contracts and other private information.",
+        )}
+      </p>
+      <div className="public-actions">
+        <a className="nav-cta" href={issues + "/new?title=Bug%20report"}>
+          {t("Report a bug")}
+        </a>
+        <a
+          className="sg-button sg-outline"
+          href={issues + "/new?title=Feature%20suggestion"}
+        >
+          {t("Suggest an improvement")}
+        </a>
+        <a
+          className="sg-button sg-outline"
+          href={issues + "/new?title=ScopeGuard%20Pro%20interest"}
+        >
+          {t("Register interest in Pro")}
+        </a>
+      </div>
+    </main>
+  );
+}
 function App() {
   const [language, setLanguage] = useState<Language>(() => {
     try {
@@ -127,12 +191,16 @@ function App() {
     const title = t(
       privacyPage
         ? "ScopeGuard AI | Privacy policy"
-        : "ScopeGuard AI | Find and price out-of-scope client work",
+        : feedbackPage
+          ? "ScopeGuard AI | Feedback"
+          : "ScopeGuard AI | Find and price out-of-scope client work",
     );
     const description = t(
       privacyPage
         ? "How ScopeGuard AI stores contracts locally, downloads AI models and lets you export or delete your workspace."
-        : "Compare client requests with contracts, cite the exact clause, and estimate extra work. Free, browser-local AI and manual review.",
+        : feedbackPage
+          ? "Report bugs, suggest improvements or register interest in ScopeGuard Pro."
+          : "Compare client requests with contracts, cite the exact clause, and estimate extra work. Free, browser-local AI and manual review.",
     );
     document.title = title;
     for (const [selector, value] of [
@@ -164,8 +232,13 @@ function App() {
     const go = () => {
       setPage(current());
       setMenu(false);
-      window.scrollTo(0, 0);
+      if (current() === "hardware-requirements")
+        requestAnimationFrame(() =>
+          document.getElementById("hardware-requirements")?.scrollIntoView(),
+        );
+      else window.scrollTo(0, 0);
     };
+    if (current() === "hardware-requirements") go();
     window.addEventListener("hashchange", go);
     return () => window.removeEventListener("hashchange", go);
   }, []);
@@ -180,7 +253,7 @@ function App() {
   }, [dark]);
   const workspacePage =
     page === "demo" ? "analysis" : isWorkspaceView(page) ? page : undefined;
-  const work = !privacyPage && workspacePage !== undefined;
+  const work = !publicPage && workspacePage !== undefined;
   const labels = {
     home: t("Overview"),
     dashboard: t("Dashboard"),
@@ -202,7 +275,7 @@ function App() {
                   key={r}
                   href={homeLink + "#" + r}
                   aria-current={
-                    !privacyPage &&
+                    !publicPage &&
                     (page === r ||
                       (page === "demo" && r === "dashboard") ||
                       (!page && r === "home"))
@@ -260,7 +333,9 @@ function App() {
           </div>
         </div>
       </header>
-      {privacyPage ? (
+      {feedbackPage ? (
+        <Feedback language={language} />
+      ) : privacyPage ? (
         <Privacy language={language} />
       ) : workspacePage ? (
         <Workspace
@@ -279,7 +354,7 @@ function App() {
         <nav className="footer-links" aria-label={t("Contact the project")}>
           <a href={homeLink + "#pricing"}>{t("Pricing")}</a>
           <a href="./privacy.html">{t("Privacy policy")}</a>
-          <a href={issues}>{t("Contact the project")}</a>
+          <a href="./feedback.html">{t("Feedback")}</a>
           <a href={issues + "/new?title=Product%20feedback"}>
             {t("Send feedback")}
           </a>

@@ -337,3 +337,47 @@ html.dark {
     gap: 0.12rem;
   }
 }
+
+.pricing {
+  display: block;
+}
+.pricing-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.1rem;
+  margin-top: 2rem;
+}
+.pricing-options .price-card {
+  min-width: 0;
+}
+.price-card p {
+  color: var(--muted);
+  margin: 0 0 0.85rem;
+}
+.price-card h2 small {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin-inline-start: 0.4rem;
+}
+.public-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+.public-actions a,
+.price-card .sg-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  border-radius: 7px;
+}
+@media (max-width: 600px) {
+  .pricing-options {
+    grid-template-columns: 1fr;
+  }
+  .pricing-options .price-card {
+    margin-top: 0;
+  }
+}

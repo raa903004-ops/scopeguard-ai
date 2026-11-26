@@ -138,6 +138,7 @@ export function groundedResult(
   contract: string,
   language: Language,
   chat: boolean,
+  retryUncited = false,
 ) {
   if (!input || typeof input !== "object")
     throw new MessageError("Review output must be an object.");
@@ -151,6 +152,10 @@ export function groundedResult(
     throw new MessageError(
       "Evidence must match a passage in the contract exactly. Use an uncertain decision if there is no evidence.",
     );
+  if (retryUncited && !chat && clause === 0 && output.status !== "uncertain")
+    throw new MessageError(
+      "The model gave a definite decision without a supporting clause.",
+    );
   const literalAnswer =
     chat && typeof output.reasoning === "string" ? output.reasoning.trim() : "";
   const evidence =
@@ -159,7 +164,7 @@ export function groundedResult(
       : literalAnswer && clauses.includes(literalAnswer)
         ? literalAnswer
         : "";
-  return validateGenerated(
+  const result = validateGenerated(
     {
       ...output,
       ...(chat ? { hours: 0, tasks: undefined } : {}),
@@ -170,6 +175,9 @@ export function groundedResult(
     language,
     chat,
   );
+  return !chat && !evidence
+    ? { ...result, hours: 0, tasks: undefined }
+    : result;
 }
 
 export function analysisPrompt(language: Language, chat: boolean) {
@@ -488,7 +496,7 @@ export async function analyze(
               content:
                 analysisPrompt(language, chat) +
                 (retry
-                  ? " Correct the previous malformed result. Provide nonempty localized explanations, valid numeric ranges and a clause number from the input."
+                  ? " Recheck the numbered clauses, not the previous result. If the requested work is explicitly excluded, use out_of_scope and its clause number. Return a localized explanation and valid hour ranges."
                   : ""),
             },
             { role: "user", content: data },
@@ -510,9 +518,9 @@ export async function analyze(
           temperature: retry ? 0.15 : 0,
         });
         signal?.throwIfAborted();
-        return response;
+        return { response, retry };
       },
-      (response) => {
+      ({ response, retry }) => {
         const choice = response.choices[0];
         if (choice?.finish_reason !== "stop" || !choice.message.content)
           throw new MessageError(
@@ -524,6 +532,7 @@ export async function analyze(
           reviewedText,
           language,
           chat,
+          !retry,
         );
       },
     );

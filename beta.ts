@@ -26,6 +26,12 @@ const agreed = (status: WorkStatus) =>
 export const allowsPayment = (status: WorkStatus) =>
   status === "invoiced" || status === "paid";
 
+export const paymentToSave = (
+  status: WorkStatus,
+  stored: number,
+  draft: string,
+) => (allowsPayment(status) || stored > 0 ? Number(draft) : stored);
+
 const validMoney = (value: unknown, max = 10_000_000_000): value is number =>
   typeof value === "number" &&
   Number.isFinite(value) &&

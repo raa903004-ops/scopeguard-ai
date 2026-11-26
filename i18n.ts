@@ -513,6 +513,45 @@ const ru = {
     "Отмечайте согласование, выставление счёта и оплату по мере работы.",
   "Retrying the model response…": "Повторная попытка получить ответ модели…",
   "Draft copied.": "Черновик скопирован.",
+  Feedback: "Обратная связь",
+  "Share feedback or report a bug": "Оставьте отзыв или сообщите об ошибке",
+  "Send reproducible steps and your browser version so the issue can be investigated.":
+    "Опишите шаги воспроизведения и укажите версию браузера, чтобы мы могли проверить проблему.",
+  "Suggest an improvement": "Предложить улучшение",
+  "Register interest in Pro": "Сообщить об интересе к Pro",
+  "ScopeGuard AI | Feedback": "ScopeGuard AI | Обратная связь",
+  "Report bugs, suggest improvements or register interest in ScopeGuard Pro.":
+    "Сообщите об ошибках, предложите улучшения или расскажите об интересе к ScopeGuard Pro.",
+  "Hardware requirements": "Требования к устройству",
+  "Local AI needs WebGPU and hardware acceleration in a compatible browser on HTTPS or localhost. Check WebGPU in Settings before downloading.":
+    "Для локального ИИ нужен браузер с WebGPU и включённым аппаратным ускорением. Используйте HTTPS или localhost и проверьте WebGPU в настройках.",
+  "The default model downloads about 265 MiB of weights, plus runtime files. Some fallback models are larger. Allow additional browser storage and GPU memory.":
+    "Браузер скачивает около 265 МиБ весов модели по умолчанию и файлы среды выполнения. Резервные модели могут быть больше. Оставьте запас места в браузере и видеопамяти.",
+  "Manual review works without a compatible GPU. PDFs need a text layer.":
+    "Ручная проверка работает без совместимой видеокарты. PDF должен содержать текстовый слой.",
+  "Free beta": "Бесплатная бета",
+  "Use the free beta now. Pro is optional and planned.":
+    "Бесплатная бета доступна сейчас. Дополнительный тариф Pro пока в планах.",
+  Planned: "В планах",
+  "Price to be announced": "Цена будет объявлена",
+  "Pro is not available for purchase. Share what you need from it on GitHub.":
+    "Pro пока нельзя купить. Расскажите на GitHub, какие возможности вам нужны.",
+  "Workspace and contract review": "Рабочая область и проверка договоров",
+  "The app does not collect analytics or require an account. If you send feedback, GitHub may require an account and your issue is public.":
+    "Приложение не собирает аналитику и не требует аккаунта. Для обратной связи на GitHub может понадобиться аккаунт. Сообщения там публичны.",
+  "Chat history, contract versions, extra-work records and drafts are also stored in this browser. Download a backup before clearing site data or switching devices.":
+    "История чата, версии договоров, учёт допработ и черновики тоже хранятся в этом браузере. Скачайте резервную копию перед очисткой данных сайта или сменой устройства.",
+  "Open hardware requirements": "Посмотреть требования к устройству",
+  "Verify the cited clause and the estimate before approving any extra work.":
+    "Перед согласованием допработ проверьте цитату и оценку.",
+  "The model gave a definite decision without a supporting clause.":
+    "Модель дала определённый ответ без подтверждающего пункта договора.",
+  "Try ScopeGuard free": "Попробуйте ScopeGuard бесплатно",
+  "Optional Pro is planned": "Дополнительный Pro в планах",
+  "No estimate was confirmed because the model did not cite the contract.":
+    "Оценка не подтверждена: модель не сослалась на договор.",
+  "The app sends no usage telemetry and requires no account. Hosting and model providers receive ordinary connection information when serving public files. GitHub feedback is public and may require an account.":
+    "Приложение не отправляет телеметрию и не требует аккаунта. При загрузке публичных файлов хостинг и поставщики моделей получают обычные данные подключения. Обратная связь на GitHub публична и может требовать аккаунт.",
 };
 
 export type Message = keyof typeof ru;

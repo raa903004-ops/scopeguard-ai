@@ -2,6 +2,7 @@ import {
   compareContracts,
   financialTotals,
   parseBackup,
+  paymentToSave,
   validWork,
 } from "./beta.ts";
 import { upgradeWorkspace } from "./workspace-db.ts";
@@ -455,4 +456,35 @@ test("retries malformed model results once and never retries transport errors", 
     ),
     /transport failure/,
   );
+});
+
+test("ignores an unsaved receipt from a hidden field", () => {
+  assert.equal(paymentToSave("rejected", 0, "999"), 0);
+  assert.equal(paymentToSave("detected", 0, "999"), 0);
+  assert.equal(paymentToSave("invoiced", 0, "150"), 150);
+  assert.equal(paymentToSave("rejected", 150, "150"), 150);
+});
+
+test("retries a definite AI decision with no citation before downgrading it", () => {
+  const row = {
+    ...result,
+    clause: 0,
+    tasks: [
+      {
+        task: "Hosting",
+        minHours: 1,
+        maxHours: 2,
+        assumptions: "One site only.",
+      },
+    ],
+  };
+  assert.throws(
+    () => groundedResult(row, [contract], contract, "en", false, true),
+    /without a supporting clause/,
+  );
+  const review = groundedResult(row, [contract], contract, "en", false);
+  assert.equal(review.status, "uncertain");
+  assert.equal(review.evidence, "");
+  assert.equal(review.hours, 0);
+  assert.equal(review.tasks, undefined);
 });

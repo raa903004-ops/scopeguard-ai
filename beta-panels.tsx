@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Button } from "./button";
 import {
   allowsPayment,
+  paymentToSave,
   compareContracts,
   workStatuses,
   type WorkRecord,
@@ -139,6 +140,7 @@ export function ExtraWork({
   const [amount, setAmount] = useState(String(initial.amount));
   const [received, setReceived] = useState(String(initial.received));
   const [draft, setDraft] = useState(review.agreement);
+  const canEditReceived = allowsPayment(status) || initial.received > 0;
   return (
     <section className="ws-beta">
       <h3>
@@ -150,7 +152,7 @@ export function ExtraWork({
           saveWork({
             status,
             amount: Number(amount),
-            received: Number(received),
+            received: paymentToSave(status, initial.received, received),
             currency: initial.currency,
           });
         }}
@@ -182,7 +184,7 @@ export function ExtraWork({
                 onChange={(e) => setAmount(e.target.value)}
               />
             </label>
-            {(allowsPayment(status) || initial.received > 0) && (
+            {canEditReceived && (
               <label>
                 {t("Received amount")} ({initial.currency})
                 <input

@@ -10,6 +10,7 @@ export default defineConfig({
       input: {
         home: fileURLToPath(new URL("./index.html", import.meta.url)),
         privacy: fileURLToPath(new URL("./privacy.html", import.meta.url)),
+        feedback: fileURLToPath(new URL("./feedback.html", import.meta.url)),
       },
     },
   },

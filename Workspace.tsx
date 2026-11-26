@@ -1169,6 +1169,11 @@ export default function Workspace({
             {t("Analyze a client request and verify its contract quote.")}
           </li>
           <li>
+            {t(
+              "Verify the cited clause and the estimate before approving any extra work.",
+            )}
+          </li>
+          <li>
             {t("Track approval, invoicing and payment as work progresses.")}
           </li>
         </ol>
@@ -1183,6 +1188,11 @@ export default function Workspace({
           </a>
         )}
         {sampleAction}
+        {!sampleMode && (
+          <a className="ws-inline-link" href="./#hardware-requirements">
+            {t("Open hardware requirements")}
+          </a>
+        )}
       </div>
     </Panel>
   );
@@ -1868,6 +1878,16 @@ export default function Workspace({
                           {detail.evidence && (
                             <blockquote>{detail.evidence}</blockquote>
                           )}
+                          {detail.source === "Local AI" &&
+                            detail.status === "uncertain" &&
+                            !detail.evidence &&
+                            !detail.edited && (
+                              <p>
+                                {t(
+                                  "No estimate was confirmed because the model did not cite the contract.",
+                                )}
+                              </p>
+                            )}
                           <p lang={detail.reasoningLanguage}>
                             {detail.reasoning}
                           </p>

@@ -360,6 +360,27 @@ export default function Landing({ language }: { language: Language }) {
           </output>
         </div>
       </section>
+      <section
+        className="sg-feature-section sg-privacy"
+        id="hardware-requirements"
+      >
+        <h2>{t("Hardware requirements")}</h2>
+        <p>
+          {t(
+            "Local AI needs WebGPU and hardware acceleration in a compatible browser on HTTPS or localhost. Check WebGPU in Settings before downloading.",
+          )}
+        </p>
+        <p>
+          {t(
+            "The default model downloads about 265 MiB of weights, plus runtime files. Some fallback models are larger. Allow additional browser storage and GPU memory.",
+          )}
+        </p>
+        <p>
+          {t(
+            "Manual review works without a compatible GPU. PDFs need a text layer.",
+          )}
+        </p>
+      </section>
       <section className="sg-feature-section sg-faq">
         <h2>{t("Frequently asked questions")}</h2>
         {(
