@@ -59,6 +59,7 @@ export default function Landing({ language }: { language: Language }) {
   const t = translate(language);
   const examples = examplesFor(t);
   const [index, setIndex] = useState(0);
+  const [roi, setRoi] = useState({ requests: "0", hours: "0", rate: "0" });
   const [rate, setRate] = useState("125");
   const demo = useRef<HTMLElement>(null);
   const example = examples[index];
@@ -248,6 +249,151 @@ export default function Landing({ language }: { language: Language }) {
             </div>
           </div>
         </div>
+      </section>
+      <section className="sg-feature-section">
+        <h2>{t("Spot extra work before it goes unbilled.")}</h2>
+        <p>
+          {t(
+            "See the clause, estimate the work and send a clear response to your client.",
+          )}
+        </p>
+        <div className="sg-feature-grid">
+          {(
+            [
+              [
+                FileText,
+                "Cite the agreement",
+                "Highlight the exact clause behind each supported finding.",
+              ],
+              [
+                Layers2,
+                "Track potential revenue",
+                "Review estimates across projects and export a report.",
+              ],
+              [
+                LockKeyhole,
+                "Keep client documents local",
+                "Contracts, analysis and history stay in your browser.",
+              ],
+            ] as const
+          ).map(([Icon, title, copy]) => (
+            <article key={title}>
+              <Icon size={20} />
+              <h3>{t(title)}</h3>
+              <p>{t(copy)}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+      <section className="sg-feature-section">
+        <h2>{t("Built for client work")}</h2>
+        <div className="sg-feature-grid">
+          {(
+            [
+              ["Agencies", "Check extra pages, formats and revision rounds."],
+              [
+                "Consultancies",
+                "Check whether workshops and new deliverables are covered.",
+              ],
+              [
+                "Freelancers",
+                "Estimate change requests before agreeing to more work.",
+              ],
+            ] as const
+          ).map(([title, copy]) => (
+            <article key={title}>
+              <h3>{t(title)}</h3>
+              <p>{t(copy)}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+      <section className="sg-feature-section sg-roi">
+        <div>
+          <h2>{t("Estimate your monthly opportunity")}</h2>
+          <p>{t("Illustrative estimate based on your inputs.")}</p>
+          <div className="sg-roi-fields">
+            {(
+              [
+                ["requests", "Out-of-scope requests per month", 10000, "1"],
+                ["hours", "Average hours per request", 1000, ".01"],
+                ["rate", "Hourly rate (USD)", 100000, ".01"],
+              ] as const
+            ).map(([key, label, max, step]) => (
+              <label key={key}>
+                {t(label)}
+                <input
+                  type="number"
+                  min="0"
+                  max={max}
+                  step={step}
+                  value={roi[key]}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setRoi((current) => ({
+                      ...current,
+                      [key]:
+                        value === ""
+                          ? ""
+                          : String(Math.max(0, Math.min(max, Number(value)))),
+                    }));
+                  }}
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="sg-roi-total">
+          <small>{t("Potential monthly revenue")}</small>
+          <output>
+            {new Intl.NumberFormat(locale[language], {
+              style: "currency",
+              currency: "USD",
+            }).format(
+              Number(roi.requests) * Number(roi.hours) * Number(roi.rate),
+            )}
+          </output>
+        </div>
+      </section>
+      <section className="sg-feature-section sg-faq">
+        <h2>{t("Frequently asked questions")}</h2>
+        {(
+          [
+            [
+              "Where are my contracts stored?",
+              "Contracts and history are stored in this browser. You can export or delete them in Settings.",
+            ],
+            [
+              "Do I need a GPU?",
+              "Local AI requires a compatible WebGPU adapter. Manual review works without WebGPU.",
+            ],
+            [
+              "Can I trust an AI finding?",
+              "ScopeGuard checks that quoted text is present in your contract. Review whether the passage supports the conclusion before sharing it.",
+            ],
+            [
+              "Which files are supported?",
+              "Import TXT or PDFs with a text layer, or paste your contract.",
+            ],
+          ] as const
+        ).map(([question, answer]) => (
+          <details key={question}>
+            <summary>{t(question)}</summary>
+            <p>{t(answer)}</p>
+          </details>
+        ))}
+      </section>
+      <section className="sg-feature-section sg-privacy">
+        <LockKeyhole size={21} />
+        <h2>{t("Privacy")}</h2>
+        <p>
+          {t(
+            "Model weights are downloaded on first use. Your contract and client requests are processed on this device.",
+          )}
+        </p>
+        <a className="nav-cta" href="#dashboard">
+          {t("Open workspace")}
+        </a>
       </section>
     </main>
   );

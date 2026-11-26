@@ -34,6 +34,19 @@ const result = {
   evidence: contract,
   hours: 1.5,
 };
+test("a stopped analysis does not initialise WebLLM", async () => {
+  await assert.rejects(
+    analyze(
+      contract,
+      "Add hosting",
+      () => assert.fail("Unexpected progress"),
+      "",
+      "en",
+      { signal: AbortSignal.abort() },
+    ),
+    /Analysis stopped/,
+  );
+});
 test("rejects an altered excerpt before loading the model", async () => {
   await assert.rejects(
     analyze(contract, "Add hosting", () => {}, "Hosting is included."),

@@ -237,3 +237,168 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+.ws-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.ws-actions {
+  flex-wrap: wrap;
+}
+.ws-chart {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: clamp(4px, 2vw, 18px);
+  text-align: center;
+}
+.ws-chart li {
+  display: grid;
+  gap: 8px;
+  align-items: end;
+  overflow-wrap: anywhere;
+}
+.ws-chart strong {
+  font-size: clamp(0.67rem, 1.5vw, 0.95rem);
+}
+.ws-chart-track {
+  height: 110px;
+  background: var(--bg);
+  border-radius: 6px;
+  display: flex;
+  align-items: end;
+  overflow: hidden;
+}
+.ws-chart-track span {
+  width: 100%;
+  border-radius: 6px 6px 0 0;
+  background: var(--accent);
+  transition: height 0.2s ease;
+}
+.ws .ws-contract {
+  position: relative;
+  max-height: 430px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+}
+.ws-contract mark {
+  background: #fee58c;
+  color: #242015;
+  border-radius: 2px;
+}
+.ws-progress {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+.ws-progress progress {
+  width: min(100%, 16rem);
+  accent-color: var(--accent);
+}
+.ws-history[aria-current="true"] {
+  border-color: var(--accent);
+}
+.ws-chat {
+  max-height: 420px;
+  overflow: auto;
+  margin-bottom: 1rem;
+}
+.ws-chat li {
+  border-bottom: 1px solid var(--line);
+  padding: 1rem 0;
+  overflow-wrap: anywhere;
+}
+.ws-print {
+  display: none;
+}
+@media (max-width: 720px) {
+  .ws-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media print {
+  @page {
+    margin: 18mm;
+  }
+  body:has(.ws-print) {
+    color: #171923;
+    background: white;
+  }
+  #root:has(.ws-print) > :not(.ws),
+  .ws:has(.ws-print) > :not(.ws-print) {
+    display: none !important;
+  }
+  .ws:has(.ws-print) {
+    width: auto;
+    padding: 0;
+  }
+  .ws .ws-print {
+    display: block;
+    color: #171923;
+    font:
+      10.5pt/1.5 Arial,
+      sans-serif;
+  }
+  .ws-print header {
+    border-bottom: 2px solid #6c52d8;
+    margin-bottom: 12pt;
+  }
+  .ws-print h1 {
+    font-size: 24pt;
+    letter-spacing: normal;
+  }
+  .ws-print h2 {
+    font-size: 15pt;
+  }
+  .ws-print h3 {
+    font-weight: bold;
+    font-size: 12pt;
+    break-after: avoid;
+  }
+  .ws-print section {
+    border-top: 1px solid #dedbe8;
+    padding-top: 8pt;
+    margin-top: 8pt;
+  }
+  .ws .ws-print p {
+    color: #242434;
+    margin: 5pt 0 8pt;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .ws .ws-print blockquote {
+    background: #f3f1fa;
+    color: #1c1835;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}
+
+.ws-project-chart {
+  display: grid;
+  gap: 0.85rem;
+}
+.ws-project-chart li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.4rem 0.8rem;
+  font-size: 0.9rem;
+}
+.ws-project-chart li > span {
+  overflow-wrap: anywhere;
+}
+.ws-project-chart li > div {
+  grid-column: 1 / -1;
+  height: 8px;
+  border-radius: 6px;
+  background: var(--bg);
+  overflow: hidden;
+}
+.ws-project-chart li > div span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 6px;
+  transition: width 0.2s ease;
+}

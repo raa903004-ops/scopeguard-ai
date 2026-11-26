@@ -233,6 +233,118 @@ const ru = {
     "Не удалось прочитать файл. Проверьте, открывается ли он, или вставьте текст договора.",
   "This PDF is password-protected. Paste the contract text manually.":
     "PDF защищён паролем. Вставьте текст договора вручную.",
+  "Estimated revenue by project": "Потенциальная выручка по проектам",
+  "Top five projects by estimated extra work.":
+    "Пять проектов с наибольшей оценкой доплаты.",
+  "Estimated revenue trend": "Динамика потенциальной выручки",
+  "Out-of-scope estimates from saved reviews. Sample projects are excluded.":
+    "Оценки работ вне договора по сохранённым проверкам. Учебные проекты исключены.",
+  "No out-of-scope estimates yet.": "Пока нет оценок работ вне договора.",
+  "Out-of-scope reviews": "Проверки вне договора",
+  "No matching projects.": "Нет подходящих проектов.",
+  "Search projects": "Поиск проектов",
+  "Filter by review status": "Фильтр по статусу проверки",
+  "All statuses": "Все статусы",
+  "No matching reviews.": "Нет подходящих проверок.",
+  "Search review history": "Поиск по истории проверок",
+  "Contract and findings": "Договор и результаты",
+  "Select a review to see its findings and evidence.":
+    "Выберите проверку, чтобы увидеть результаты и цитату.",
+  "Evidence is highlighted in the saved contract.":
+    "Цитата выделена в сохранённом договоре.",
+  "Edit findings": "Редактировать результаты",
+  "Save changes": "Сохранить изменения",
+  "Findings updated.": "Результаты обновлены.",
+  "Edited manually": "Изменено вручную",
+  "Batch review": "Пакетная проверка",
+  "One client request per line (up to 10).": "Один запрос на строку (до 10).",
+  "Analyze batch": "Проверить список",
+  "Enter 1 to 10 requests, one per line.":
+    "Введите от 1 до 10 запросов, по одному на строку.",
+  "Batch stopped at request {number}. Saved earlier results. Remaining requests are ready to retry.":
+    "Проверка остановилась на запросе № {number}. Предыдущие результаты сохранены. Оставшиеся запросы можно проверить повторно.",
+  "Batch reviews saved.": "Пакет проверок сохранён.",
+  "Contract chat": "Чат по договору",
+  "Ask about the selected contract. The local model must cite a clause for supported answers.":
+    "Задайте вопрос по выбранному договору. Локальная модель подкрепляет ответы цитатами.",
+  "Question about this contract": "Вопрос по этому договору",
+  "Ask locally": "Задать вопрос",
+  "No supporting clause was verified for this answer.":
+    "Для ответа не удалось подтвердить цитату из договора.",
+  "Clear chat": "Очистить чат",
+  "Findings report": "Отчёт по проверкам",
+  "Export CSV": "Скачать CSV",
+  "Print / Save PDF": "Печать / Сохранить PDF",
+  "Generated on this device": "Сформировано на этом устройстве",
+  "Report estimates are based on saved reviews.":
+    "В отчёте приведены оценки из сохранённых проверок.",
+  Date: "Дата",
+  Source: "Источник",
+  "Sample project": "Учебный проект",
+  "Try a sample contract": "Попробовать учебный договор",
+  "Start with a fictional agreement and a client request. Run your first local analysis when ready.":
+    "Откройте вымышленный договор и запрос клиента. Когда будете готовы, запустите первый локальный анализ.",
+  "Load sample contract": "Загрузить учебный договор",
+  "Sample website project": "Учебный проект сайта",
+  "The project includes design and delivery of one homepage. Additional pages require a separate estimate. Two rounds of homepage revisions are included.":
+    "Проект включает дизайн и передачу одной главной страницы. Дополнительные страницы оцениваются отдельно. В стоимость входят два раунда правок главной страницы.",
+  "Could you also design a separate pricing page?":
+    "Можете также сделать дизайн отдельной страницы с ценами?",
+  "Sample loaded. Run local analysis to generate the first finding.":
+    "Учебный договор готов. Запустите локальный анализ, чтобы получить первый результат.",
+  "The initial model download can take several minutes or longer. Keep this tab open. Later runs reuse cached files.":
+    "Первая загрузка модели может занять несколько минут или дольше. Оставьте вкладку открытой. При повторном запуске используются сохранённые файлы.",
+  "Retry local analysis": "Повторить локальный анализ",
+  "Switch to manual review": "Перейти к ручной проверке",
+  "Working on request {current} of {total}": "Запрос {current} из {total}",
+  "Stop analysis": "Остановить анализ",
+  "Stopping analysis…": "Останавливаем анализ…",
+  "Analysis stopped.": "Анализ остановлен.",
+  "Spot extra work before it goes unbilled.":
+    "Выявляйте дополнительные работы до того, как они останутся неоплаченными.",
+  "See the clause, estimate the work and send a clear response to your client.":
+    "Найдите пункт договора, оцените работу и подготовьте понятный ответ клиенту.",
+  "Cite the agreement": "Ссылайтесь на договор",
+  "Highlight the exact clause behind each supported finding.":
+    "Выделяйте точный пункт договора, на котором основан вывод.",
+  "Track potential revenue": "Оценивайте потенциальную выручку",
+  "Review estimates across projects and export a report.":
+    "Сравнивайте оценки по проектам и выгружайте отчёты.",
+  "Keep client documents local": "Храните документы клиентов локально",
+  "Contracts, analysis and history stay in your browser.":
+    "Договоры, анализ и история остаются в вашем браузере.",
+  "Built for client work": "Для команд, работающих с клиентами",
+  Agencies: "Агентства",
+  "Check extra pages, formats and revision rounds.":
+    "Проверяйте запросы на дополнительные страницы, форматы и раунды правок.",
+  Consultancies: "Консалтинг",
+  "Check whether workshops and new deliverables are covered.":
+    "Уточняйте, входят ли воркшопы и новые результаты в договор.",
+  Freelancers: "Фрилансеры",
+  "Estimate change requests before agreeing to more work.":
+    "Оценивайте изменения до согласия на дополнительную работу.",
+  "Estimate your monthly opportunity": "Оцените потенциальную выручку за месяц",
+  "Out-of-scope requests per month": "Запросы вне договора в месяц",
+  "Average hours per request": "Среднее число часов на запрос",
+  "Potential monthly revenue": "Потенциальная выручка в месяц",
+  "Illustrative estimate based on your inputs.":
+    "Пример расчёта на основе ваших значений.",
+  "Frequently asked questions": "Частые вопросы",
+  "Where are my contracts stored?": "Где хранятся мои договоры?",
+  "Contracts and history are stored in this browser. You can export or delete them in Settings.":
+    "Договоры и история хранятся в этом браузере. В настройках их можно экспортировать или удалить.",
+  "Do I need a GPU?": "Нужна ли видеокарта?",
+  "Local AI requires a compatible WebGPU adapter. Manual review works without WebGPU.":
+    "Для локального ИИ нужен совместимый адаптер WebGPU. Ручная проверка работает и без WebGPU.",
+  "Can I trust an AI finding?": "Можно ли доверять выводу ИИ?",
+  "ScopeGuard checks that quoted text is present in your contract. Review whether the passage supports the conclusion before sharing it.":
+    "ScopeGuard проверяет наличие цитаты в договоре. Перед отправкой оцените, действительно ли пункт подтверждает вывод.",
+  "Which files are supported?": "Какие форматы поддерживаются?",
+  "Import TXT or PDFs with a text layer, or paste your contract.":
+    "Импортируйте TXT или PDF с текстовым слоем либо вставьте текст договора.",
+  Privacy: "Конфиденциальность",
+  "Model weights are downloaded on first use. Your contract and client requests are processed on this device.":
+    "Веса модели скачиваются при первом запуске. Договор и запросы клиентов обрабатываются на этом устройстве.",
 };
 
 export type Message = keyof typeof ru;

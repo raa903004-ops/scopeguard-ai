@@ -503,3 +503,111 @@
     font-size: 7px;
   }
 }
+
+.sg-feature-section {
+  width: min(1120px, calc(100% - 48px));
+  margin: clamp(3rem, 8vw, 6rem) auto;
+}
+.sg-feature-section h2 {
+  font-size: clamp(1.7rem, 4vw, 2.8rem);
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+  font-weight: 650;
+}
+.sg-feature-section p {
+  color: var(--muted);
+  line-height: 1.6;
+  margin: 0.7rem 0;
+}
+.sg-feature-grid,
+.sg-roi-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1.2rem;
+}
+.sg-feature-grid article,
+.sg-roi,
+.sg-privacy {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 16px;
+  padding: clamp(1.1rem, 3vw, 2rem);
+}
+.sg-feature-grid article {
+  transition: border-color 0.2s ease;
+}
+.sg-feature-grid article:hover {
+  border-color: var(--accent);
+}
+.sg-feature-grid h3 {
+  font-weight: 650;
+  margin-top: 0.5rem;
+}
+.sg-feature-grid svg,
+.sg-privacy > svg {
+  color: var(--accent);
+}
+.sg-roi {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.45fr);
+  gap: 2rem;
+  align-items: center;
+}
+.sg-roi-fields label {
+  display: grid;
+  align-content: end;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+}
+.sg-roi input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.sg-roi-total {
+  border-left: 1px solid var(--line);
+  padding-left: 1.5rem;
+}
+.sg-roi output {
+  display: block;
+  font-size: clamp(1.35rem, 4vw, 2.6rem);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.sg-faq details {
+  border-bottom: 1px solid var(--line);
+  padding: 1rem 0;
+}
+.sg-faq summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.sg-faq h2 {
+  margin-bottom: 0.8rem;
+}
+.sg-privacy h2 {
+  margin-top: 0.6rem;
+}
+.sg-privacy a {
+  display: inline-flex;
+  margin-top: 0.5rem;
+}
+@media (max-width: 700px) {
+  .sg-feature-grid,
+  .sg-roi {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sg-roi-total {
+    border: 0;
+    padding: 0;
+  }
+}
+@media (max-width: 430px) {
+  .sg-roi-fields {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.65rem;
+  }
+}

@@ -1,4 +1,10 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { openDB, type DBSchema } from "idb";
 import {
   Archive,
@@ -32,19 +38,23 @@ import {
   type Language,
   type Message,
 } from "./i18n";
+import {
+  ContractText,
+  exportCsv,
+  extraWork,
+  FindingsReport,
+  RevenueTrend,
+  RevenueByProject,
+  statuses,
+  type Review,
+} from "./insights";
 import "./workspace.css";
 
-type Project = { id: string; name: string; contract: string };
-type Review = Result & {
+type Project = {
   id: string;
-  project: string;
   name: string;
   contract: string;
-  request: string;
-  rate: number;
-  created: string;
-  source: "Manual" | "Local AI";
-  reasoningLanguage?: Language;
+  synthetic?: boolean;
 };
 interface Store extends DBSchema {
   projects: { key: string; value: Project };
@@ -59,11 +69,6 @@ const database = () =>
       db.createObjectStore("settings");
     },
   });
-const statuses = {
-  in_scope: "In scope",
-  out_of_scope: "Out of scope",
-  uncertain: "Uncertain",
-} as const;
 const requiredField = "Fill in this field.";
 const invalidNumber = "Enter a valid number within the allowed range.";
 const blankReview: Result = {
@@ -165,7 +170,7 @@ export default function Workspace({
   const [contract, setContract] = useState("");
   const [request, setRequest] = useState("");
   const [excerpt, setExcerpt] = useState("");
-  const [mode, setMode] = useState<"ai" | "manual">("ai");
+  const [mode, setMode] = useState<"ai" | "manual" | "batch">("ai");
   const [manual, setManual] = useState<Result>({ ...blankReview });
   const [activity, setActivity] = useState<Message>();
   const [progress, setProgress] = useState<number>();
@@ -175,6 +180,38 @@ export default function Workspace({
   const [draft, setDraft] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [editFinding, setEditFinding] = useState<{
+    result: Result;
+    rate: string;
+  }>();
+  const [projectQuery, setProjectQuery] = useState("");
+  const [projectStatus, setProjectStatus] = useState<Result["status"] | "">("");
+  const [historyQuery, setHistoryQuery] = useState("");
+  const [historyStatus, setHistoryStatus] = useState<Result["status"] | "">("");
+  const [question, setQuestion] = useState("");
+  const [chats, setChats] = useState<
+    Record<string, { question: string; answer: Result }[]>
+  >({});
+  const [batchStep, setBatchStep] = useState<{
+    current: number;
+    total: number;
+  }>();
+  const [batchFailed, setBatchFailed] = useState<number>();
+  const [retryReview, setRetryReview] = useState(false);
+  const activeAnalysis = useRef<AbortController | null>(null);
+  const [stopping, setStopping] = useState(false);
+  const turns = chats[selected] ?? [];
+  const realProjectIds = new Set(
+    projects.filter((p) => !p.synthetic).map((p) => p.id),
+  );
+  const realReviews = reviews.filter(
+    (row) => !row.synthetic && realProjectIds.has(row.project),
+  );
+  const updateProgress = (message: Message, fraction?: number) => {
+    if (activeAnalysis.current?.signal.aborted) return;
+    setActivity(message);
+    setProgress(fraction);
+  };
   useEffect(() => {
     let active = true;
     const init = async () => {
@@ -214,6 +251,7 @@ export default function Workspace({
       });
     return () => {
       active = false;
+      activeAnalysis.current?.abort();
     };
   }, []);
   async function perform(label: Message, fn: () => Promise<void>) {
@@ -227,14 +265,24 @@ export default function Workspace({
     } finally {
       setActivity(undefined);
       setProgress(undefined);
+      setBatchStep(undefined);
+      activeAnalysis.current = null;
+      setStopping(false);
     }
   }
   function openReview(r: Review) {
     setDetail(r);
+    setEditFinding(undefined);
     setDraft("");
   }
   function choose(p: Project) {
     select(p.id);
+    setEditFinding(undefined);
+    setQuestion("");
+    setBatchFailed(undefined);
+    setRetryReview(false);
+    setHistoryStatus("");
+    setHistoryQuery("");
     setDetail(undefined);
     setDraft("");
     setRequest("");
@@ -261,56 +309,266 @@ export default function Workspace({
       setNotice("Project saved on this device.");
     });
   }
-  async function saveReview(event: FormEvent) {
-    event.preventDefault();
-    if (!project || !request.trim() || !validRate(rate)) return;
-    await perform(
-      mode === "ai" ? "Preparing local model…" : "Saving review…",
-      async () => {
-        const output =
-          mode === "ai"
-            ? await analyze(
-                project.contract,
-                request,
-                (message, fraction) => {
-                  setActivity(message);
-                  setProgress(fraction);
-                },
-                excerpt,
-                language,
-              )
-            : validate(manual, project.contract);
-        const r: Review = {
-          ...validate(output, project.contract),
-          id: crypto.randomUUID(),
-          project: project.id,
-          name: project.name,
-          contract: project.contract,
-          request: request.trim(),
-          rate: Number(rate),
-          created: new Date().toISOString(),
-          source: mode === "ai" ? "Local AI" : "Manual",
-          reasoningLanguage: mode === "ai" ? language : undefined,
-        };
+  async function loadSample() {
+    await perform("Saving project…", async () => {
+      const sample = projects.find((p) => p.synthetic) ?? {
+        id: crypto.randomUUID(),
+        name: t("Sample website project"),
+        contract: t(
+          "The project includes design and delivery of one homepage. Additional pages require a separate estimate. Two rounds of homepage revisions are included.",
+        ),
+        synthetic: true,
+      };
+      if (!projects.some((p) => p.id === sample.id)) {
         const db = await database();
         try {
-          const tx = db.transaction(["projects", "reviews"], "readwrite");
-          if (!(await tx.objectStore("projects").getKey(project.id))) {
-            throw new MessageError(
-              "This project was deleted while the review was running.",
-            );
-          }
-          await tx.objectStore("reviews").put(r);
-          await tx.done;
+          await db.put("projects", sample);
         } finally {
           db.close();
         }
-        setReviews((list) => [r, ...list]);
-        openReview(r);
+        setProjects((list) => [...list, sample]);
+      }
+      choose(sample);
+      setRequest(t("Could you also design a separate pricing page?"));
+      setMode(gpu ? "ai" : "manual");
+      setNotice(
+        "Sample loaded. Run local analysis to generate the first finding.",
+      );
+    });
+  }
+
+  async function storeReview(review: Review, update = false) {
+    const db = await database();
+    try {
+      const tx = db.transaction(["projects", "reviews"], "readwrite");
+      const [existingProject, existingReview] = await Promise.all([
+        tx.objectStore("projects").getKey(review.project),
+        update ? tx.objectStore("reviews").getKey(review.id) : undefined,
+      ]);
+      if (!existingProject || (update && !existingReview))
+        throw new MessageError(
+          "This project was deleted while the review was running.",
+        );
+      await tx.objectStore("reviews").put(review);
+      await tx.done;
+    } finally {
+      db.close();
+    }
+    setReviews((list) =>
+      update
+        ? list.map((r) => (r.id === review.id ? review : r))
+        : [review, ...list],
+    );
+    openReview(review);
+  }
+
+  async function saveReview(event: FormEvent) {
+    event.preventDefault();
+    if (
+      !project ||
+      !request.trim() ||
+      !validRate(rate) ||
+      (mode !== "manual" && !gpu)
+    )
+      return;
+    setRetryReview(false);
+    setBatchFailed(undefined);
+    await perform(
+      mode === "manual" ? "Saving review…" : "Preparing local model…",
+      async () => {
+        const controller =
+          mode !== "manual" ? new AbortController() : undefined;
+        activeAnalysis.current = controller ?? null;
+        const requests =
+          mode === "batch"
+            ? request
+                .split(/\r?\n/)
+                .map((line) => line.trim())
+                .filter(Boolean)
+            : [request.trim()];
+        if (requests.length > 10)
+          throw new MessageError("Enter 1 to 10 requests, one per line.");
+        for (let index = 0; index < requests.length; index++) {
+          const item = requests[index];
+          if (mode === "batch")
+            setBatchStep({ current: index + 1, total: requests.length });
+          try {
+            const output =
+              mode === "manual"
+                ? manual
+                : await analyze(
+                    project.contract,
+                    item,
+                    updateProgress,
+                    excerpt,
+                    language,
+                    { signal: controller?.signal },
+                  );
+            await storeReview({
+              ...validate(output, project.contract),
+              id: crypto.randomUUID(),
+              project: project.id,
+              name: project.name,
+              contract: project.contract,
+              request: item,
+              rate: Number(rate),
+              created: new Date().toISOString(),
+              source: mode === "manual" ? "Manual" : "Local AI",
+              reasoningLanguage: mode === "manual" ? undefined : language,
+              synthetic: project.synthetic,
+            });
+          } catch (error) {
+            if (mode !== "manual") setRetryReview(true);
+            if (mode === "batch") {
+              setBatchFailed(index + 1);
+              setRequest(requests.slice(index).join("\n"));
+            }
+            throw error;
+          }
+        }
         setRequest("");
         setManual({ ...blankReview });
-        setNotice("Review saved.");
+        setNotice(mode === "batch" ? "Batch reviews saved." : "Review saved.");
       },
+    );
+  }
+
+  async function saveFinding(event: FormEvent) {
+    event.preventDefault();
+    if (!editFinding || !detail) return;
+    await perform("Saving review…", async () => {
+      if (!validRate(editFinding.rate))
+        throw new MessageError("Enter a valid USD hourly rate.");
+      const output = validate(editFinding.result, detail.contract);
+      await storeReview(
+        {
+          ...detail,
+          ...output,
+          rate: Number(editFinding.rate),
+          edited: true,
+          reasoningLanguage:
+            output.reasoning === detail.reasoning
+              ? detail.reasoningLanguage
+              : undefined,
+        },
+        true,
+      );
+      setNotice("Findings updated.");
+    });
+  }
+
+  async function askContract(event: FormEvent) {
+    event.preventDefault();
+    if (!project || !gpu || !question.trim()) return;
+    await perform("Preparing local model…", async () => {
+      const asked = question.trim();
+      const controller = new AbortController();
+      activeAnalysis.current = controller;
+      const answer = await analyze(
+        project.contract,
+        asked,
+        updateProgress,
+        excerpt,
+        language,
+        {
+          previousQuestions: turns.slice(-2).map((turn) => turn.question),
+          signal: controller.signal,
+        },
+      );
+      setChats((all) => ({
+        ...all,
+        [project.id]: [...(all[project.id] ?? []), { question: asked, answer }],
+      }));
+      setQuestion("");
+    });
+  }
+
+  function resultFields(value: Result, onChange: (result: Result) => void) {
+    return (
+      <>
+        <label>
+          {t("Classification")}
+          <select
+            value={value.status}
+            onChange={(e) =>
+              onChange({ ...value, status: e.target.value as Result["status"] })
+            }
+          >
+            {Object.entries(statuses).map(([key, label]) => (
+              <option key={key} value={key}>
+                {t(label)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          {t("Exact contract quote")}
+          <textarea
+            required={value.status !== "uncertain"}
+            value={value.evidence}
+            onChange={(e) => onChange({ ...value, evidence: e.target.value })}
+          />
+        </label>
+        <label>
+          {t("Reasoning")}
+          <textarea
+            required
+            value={value.reasoning}
+            onChange={(e) => onChange({ ...value, reasoning: e.target.value })}
+          />
+        </label>
+        <label>
+          {t("Estimated hours")}
+          <input
+            type="number"
+            required
+            min="0"
+            max="100000"
+            step="any"
+            value={value.hours}
+            onChange={(e) =>
+              onChange({ ...value, hours: Number(e.target.value) })
+            }
+          />
+        </label>
+      </>
+    );
+  }
+  function statusFilter(
+    value: string,
+    onChange: (status: Result["status"] | "") => void,
+  ) {
+    return (
+      <label>
+        {t("Filter by review status")}
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value as Result["status"] | "")}
+        >
+          <option value="">{t("All statuses")}</option>
+          {Object.entries(statuses).map(([key, label]) => (
+            <option key={key} value={key}>
+              {t(label)}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+  function rateField(value: string, onChange: (newRate: string) => void) {
+    return (
+      <label>
+        {t("Hourly rate (USD)")}
+        <input
+          type="number"
+          required
+          min="0"
+          max="100000"
+          step=".01"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      </label>
     );
   }
   const disabled = !ready || !!activity;
@@ -364,6 +622,23 @@ export default function Workspace({
   );
   const feedback = activity ?? notice;
   const currentReviews = reviews.filter((r) => r.project === selected);
+  const projectMatches = projects.filter(
+    (p) =>
+      p.name
+        .toLocaleLowerCase()
+        .includes(projectQuery.trim().toLocaleLowerCase()) &&
+      (!projectStatus ||
+        reviews.some((r) => r.project === p.id && r.status === projectStatus)),
+  );
+  const historyMatches = currentReviews.filter(
+    (r) =>
+      (!historyStatus || r.status === historyStatus) &&
+      [r.request, r.evidence, r.reasoning].some((value) =>
+        value
+          .toLocaleLowerCase()
+          .includes(historyQuery.trim().toLocaleLowerCase()),
+      ),
+  );
   return (
     <main
       className="ws"
@@ -414,20 +689,60 @@ export default function Workspace({
       {error && (
         <p className="ws-error" role="alert">
           {t(error.key)}
+          {batchFailed && (
+            <span className="ws-error-detail">
+              {interpolate(
+                t(
+                  "Batch stopped at request {number}. Saved earlier results. Remaining requests are ready to retry.",
+                ),
+                { number: number.format(batchFailed) },
+              )}
+            </span>
+          )}
           {error.detail && (
             <span className="ws-error-detail">{error.detail}</span>
           )}
         </p>
       )}
+      {activity && activeAnalysis.current && (
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={stopping}
+          onClick={() => {
+            activeAnalysis.current?.abort();
+            setStopping(true);
+            setProgress(undefined);
+            setActivity("Stopping analysis…");
+          }}
+        >
+          {t("Stop analysis")}
+        </Button>
+      )}
       {feedback && (
         <p className="ws-notice" role="status">
           {t(feedback)}
+          {batchStep && (
+            <>
+              {" "}
+              ·{" "}
+              {interpolate(t("Working on request {current} of {total}"), {
+                current: number.format(batchStep.current),
+                total: number.format(batchStep.total),
+              })}
+            </>
+          )}
           {progress !== undefined && (
-            <progress
-              aria-label={t("Model download progress")}
-              value={progress}
-              max={1}
-            />
+            <span className="ws-progress">
+              <progress
+                aria-label={t("Model download progress")}
+                value={progress}
+                max={1}
+              />
+              {new Intl.NumberFormat(locale[language], {
+                style: "percent",
+              }).format(progress)}
+            </span>
           )}
         </p>
       )}
@@ -555,6 +870,11 @@ export default function Workspace({
                         }
                         setProjects([]);
                         setReviews([]);
+                        setChats({});
+                        setQuestion("");
+                        setEditFinding(undefined);
+                        setBatchFailed(undefined);
+                        setRetryReview(false);
                         select("");
                         setDetail(undefined);
                         setRequest("");
@@ -600,9 +920,28 @@ export default function Workspace({
             {!projects.length && (
               <p>{t("Your saved agreements will appear here.")}</p>
             )}
-            {projects.map((p) => (
+            <label>
+              {t("Search projects")}
+              <input
+                type="search"
+                value={projectQuery}
+                onChange={(e) => setProjectQuery(e.target.value)}
+              />
+            </label>
+            {statusFilter(projectStatus, setProjectStatus)}
+            {projects.length > 0 && projectMatches.length === 0 && (
+              <p>{t("No matching projects.")}</p>
+            )}
+            {projectMatches.map((p) => (
               <details key={p.id}>
-                <summary>{p.name}</summary>
+                <summary>
+                  {p.name}
+                  {p.synthetic && " · " + t("Sample project")}
+                </summary>
+                <small>
+                  {t("Saved reviews")} ·{" "}
+                  {reviews.filter((r) => r.project === p.id).length}
+                </small>
                 <pre>{p.contract}</pre>
                 <Button
                   disabled={disabled}
@@ -621,28 +960,59 @@ export default function Workspace({
         <>
           <div className="ws-stats">
             {[
-              [t("Projects"), projects.length],
-              [t("Saved reviews"), reviews.length],
               [
-                t("Estimated extra work"),
-                money(
-                  reviews.reduce(
-                    (n, r) =>
-                      n +
-                      (r.status === "out_of_scope"
-                        ? revenue(r.hours, r.rate)
-                        : 0),
-                    0,
-                  ),
+                t("Projects"),
+                number.format(projects.filter((p) => !p.synthetic).length),
+              ],
+              [t("Saved reviews"), number.format(realReviews.length)],
+              [
+                t("Out-of-scope reviews"),
+                number.format(
+                  realReviews.filter((r) => r.status === "out_of_scope").length,
                 ),
               ],
-            ].map(([k, v]) => (
-              <div key={k}>
-                <span>{k}</span>
-                <strong>{v}</strong>
+              [
+                t("Estimated extra work"),
+                money(realReviews.reduce((sum, r) => sum + extraWork(r), 0)),
+              ],
+            ].map(([label, value]) => (
+              <div key={label}>
+                <span>{label}</span>
+                <strong>{value}</strong>
               </div>
             ))}
           </div>
+          <div className="ws-grid">
+            <Panel title={t("Estimated revenue trend")} icon={<ScanLine />}>
+              <p>
+                {t(
+                  "Out-of-scope estimates from saved reviews. Sample projects are excluded.",
+                )}
+              </p>
+              <RevenueTrend
+                reviews={realReviews}
+                language={language}
+                t={t}
+                money={money}
+              />
+            </Panel>
+            <Panel title={t("Estimated revenue by project")} icon={<Layers />}>
+              <p>{t("Top five projects by estimated extra work.")}</p>
+              <RevenueByProject reviews={realReviews} t={t} money={money} />
+            </Panel>
+          </div>
+          {ready && !projects.length && (
+            <Panel title={t("Try a sample contract")} icon={<FileText />}>
+              <p>
+                {t(
+                  "Start with a fictional agreement and a client request. Run your first local analysis when ready.",
+                )}
+              </p>
+              <Button disabled={disabled} onClick={() => void loadSample()}>
+                {t("Load sample contract")}
+              </Button>
+            </Panel>
+          )}
           <div className="ws-grid">
             <div>
               {!project || editing ? (
@@ -659,6 +1029,7 @@ export default function Workspace({
                 </>
               ) : (
                 <Panel title={t("Review a request")} icon={<ScanLine />}>
+                  {project.synthetic && <p>{t("Sample project")}</p>}
                   <form onSubmit={saveReview}>
                     <fieldset disabled={disabled}>
                       <label>
@@ -683,10 +1054,14 @@ export default function Workspace({
                         <pre>{project.contract}</pre>
                       </details>
                       <label>
-                        {t("Client request")}
+                        {t(
+                          mode === "batch"
+                            ? "One client request per line (up to 10)."
+                            : "Client request",
+                        )}
                         <textarea
                           required
-                          rows={3}
+                          rows={mode === "batch" ? 6 : 3}
                           value={request}
                           onChange={(e) => setRequest(e.target.value)}
                           placeholder={t("Paste the client’s request…")}
@@ -701,6 +1076,9 @@ export default function Workspace({
                           }
                         >
                           <option value="manual">{t("Manual review")}</option>
+                          <option value="batch" disabled={!gpu}>
+                            {t("Batch review")}
+                          </option>
                           <option value="ai" disabled={!gpu}>
                             {t("Local AI")}
                             {gpu ? "" : " · " + t("WebGPU unavailable")}
@@ -708,73 +1086,12 @@ export default function Workspace({
                         </select>
                       </label>
                       {mode === "manual" ? (
-                        <>
-                          <label>
-                            {t("Classification")}
-                            <select
-                              value={manual.status}
-                              onChange={(e) =>
-                                setManual({
-                                  ...manual,
-                                  status: e.target.value as Result["status"],
-                                })
-                              }
-                            >
-                              {Object.entries(statuses).map(([k, v]) => (
-                                <option key={k} value={k}>
-                                  {t(v)}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label>
-                            {t("Exact contract quote")}
-                            <textarea
-                              required={manual.status !== "uncertain"}
-                              value={manual.evidence}
-                              onChange={(e) =>
-                                setManual({
-                                  ...manual,
-                                  evidence: e.target.value,
-                                })
-                              }
-                            />
-                          </label>
-                          <label>
-                            {t("Reasoning")}
-                            <textarea
-                              required
-                              value={manual.reasoning}
-                              onChange={(e) =>
-                                setManual({
-                                  ...manual,
-                                  reasoning: e.target.value,
-                                })
-                              }
-                            />
-                          </label>
-                          <label>
-                            {t("Estimated hours")}
-                            <input
-                              type="number"
-                              required
-                              min="0"
-                              step=".01"
-                              value={manual.hours}
-                              onChange={(e) =>
-                                setManual({
-                                  ...manual,
-                                  hours: Number(e.target.value),
-                                })
-                              }
-                            />
-                          </label>
-                        </>
+                        resultFields(manual, setManual)
                       ) : (
                         <>
                           <p>
                             {t(
-                              "The first analysis downloads the model. Inference runs on this device.",
+                              "The initial model download can take several minutes or longer. Keep this tab open. Later runs reuse cached files.",
                             )}
                           </p>
                           <details>
@@ -793,29 +1110,36 @@ export default function Workspace({
                           </details>
                         </>
                       )}
-                      <label>
-                        {t("Hourly rate (USD)")}
-                        <input
-                          required
-                          type="number"
-                          min="0"
-                          max="100000"
-                          step=".01"
-                          value={rate}
-                          onChange={(e) => setRate(e.target.value)}
-                        />
-                      </label>
+                      {rateField(rate, setRate)}
                       <div className="ws-actions">
-                        <Button disabled={!validRate(rate)}>
-                          {mode === "ai" ? (
+                        <Button
+                          disabled={
+                            !validRate(rate) || (mode !== "manual" && !gpu)
+                          }
+                        >
+                          {mode !== "manual" ? (
                             <ScanLine size={16} />
                           ) : (
                             <Check size={16} />
                           )}{" "}
-                          {mode === "ai"
-                            ? t("Analyze locally")
-                            : t("Save manual review")}
+                          {t(
+                            mode === "manual"
+                              ? "Save manual review"
+                              : retryReview
+                                ? "Retry local analysis"
+                                : mode === "batch"
+                                  ? "Analyze batch"
+                                  : "Analyze locally",
+                          )}
                         </Button>
+                        {retryReview && mode !== "manual" && (
+                          <button
+                            type="button"
+                            onClick={() => setMode("manual")}
+                          >
+                            {t("Switch to manual review")}
+                          </button>
+                        )}
                         <button type="button" onClick={() => setEditing(true)}>
                           {t("New project")}
                         </button>
@@ -826,72 +1150,55 @@ export default function Workspace({
               )}
             </div>
             <div>
-              {detail && (
-                <Panel title={t(statuses[detail.status])} icon={<FileText />}>
-                  <small>
-                    {t(detail.source)} · {detail.name}
-                  </small>
-                  <p>{detail.request}</p>
-                  {detail.evidence && (
-                    <blockquote>{detail.evidence}</blockquote>
-                  )}
-                  <p lang={detail.reasoningLanguage}>{detail.reasoning}</p>
-                  <b>
-                    {number.format(detail.hours)} {t("h")} ×{" "}
-                    {money(detail.rate)} / {t("h")} ={" "}
-                    {money(revenue(detail.hours, detail.rate))}
-                  </b>
-                  <p>
-                    {t("Estimated extra work")} ·{" "}
-                    {money(
-                      detail.status === "out_of_scope"
-                        ? revenue(detail.hours, detail.rate)
-                        : 0,
-                    )}
-                  </p>
-                  {!draft ? (
-                    <Button onClick={() => setDraft(email(detail))}>
-                      {t("Generate client email")}
-                    </Button>
-                  ) : (
-                    <>
-                      <label>
-                        {t("Email draft")}
-                        <textarea
-                          rows={9}
-                          value={draft}
-                          onChange={(e) => setDraft(e.target.value)}
-                        />
-                      </label>
-                      <Button
-                        onClick={() =>
-                          void perform("Copying…", async () => {
-                            await navigator.clipboard.writeText(draft);
-                            setNotice("Email copied.");
-                          })
-                        }
-                      >
-                        <Clipboard size={16} /> {t("Copy email")}
-                      </Button>
-                    </>
-                  )}
-                </Panel>
-              )}
               <Panel title={t("Review history")} icon={<History />}>
+                {project && (
+                  <div className="ws-actions">
+                    <Button
+                      disabled={!currentReviews.length || disabled}
+                      onClick={() => exportCsv(currentReviews, t, language)}
+                    >
+                      {t("Export CSV")}
+                    </Button>
+                    <Button
+                      disabled={!currentReviews.length || disabled}
+                      onClick={() => window.print()}
+                    >
+                      {t("Print / Save PDF")}
+                    </Button>
+                  </div>
+                )}
+                {currentReviews.length > 0 && (
+                  <>
+                    <label>
+                      {t("Search review history")}
+                      <input
+                        type="search"
+                        value={historyQuery}
+                        onChange={(e) => setHistoryQuery(e.target.value)}
+                      />
+                    </label>
+                    {statusFilter(historyStatus, setHistoryStatus)}
+                  </>
+                )}
                 {currentReviews.length === 0 ? (
                   <p>{t("Saved reviews for this project will appear here.")}</p>
+                ) : historyMatches.length === 0 ? (
+                  <p>{t("No matching reviews.")}</p>
                 ) : (
-                  currentReviews.map((r) => (
+                  historyMatches.map((r) => (
                     <button
                       disabled={disabled}
                       className="ws-history"
                       key={r.id}
+                      aria-current={detail?.id === r.id}
                       onClick={() => openReview(r)}
                     >
                       <b>{t(statuses[r.status])}</b>
                       <span>{r.request}</span>
                       <small>
-                        {t(r.source)} ·{" "}
+                        {t(r.source)}
+                        {r.edited && " · " + t("Edited manually")}
+                        {r.synthetic && " · " + t("Sample project")} ·{" "}
                         {new Date(r.created).toLocaleDateString(
                           locale[language],
                         )}
@@ -902,6 +1209,180 @@ export default function Workspace({
               </Panel>
             </div>
           </div>
+          {project && !editing && (
+            <>
+              <div className="ws-grid ws-findings">
+                <Panel title={t("View contract")} icon={<FileText />}>
+                  {detail?.evidence && (
+                    <p>{t("Evidence is highlighted in the saved contract.")}</p>
+                  )}
+                  <ContractText
+                    contract={detail?.contract ?? project.contract}
+                    evidence={detail?.evidence}
+                  />
+                </Panel>
+                {detail ? (
+                  <Panel title={t(statuses[detail.status])} icon={<FileText />}>
+                    <small>
+                      {t(detail.source)} · {detail.name}
+                      {detail.synthetic && " · " + t("Sample project")}
+                      {detail.edited && " · " + t("Edited manually")}
+                    </small>
+                    <p>{detail.request}</p>
+                    {detail.evidence && (
+                      <blockquote>{detail.evidence}</blockquote>
+                    )}
+                    <p lang={detail.reasoningLanguage}>{detail.reasoning}</p>
+                    <b>
+                      {number.format(detail.hours)} {t("h")} ×{" "}
+                      {money(detail.rate)} / {t("h")} ={" "}
+                      {money(revenue(detail.hours, detail.rate))}
+                    </b>
+                    <p>
+                      {t("Estimated extra work")} ·{" "}
+                      {money(
+                        detail.status === "out_of_scope"
+                          ? revenue(detail.hours, detail.rate)
+                          : 0,
+                      )}
+                    </p>
+
+                    {!editFinding && (
+                      <Button
+                        variant="ghost"
+                        disabled={disabled}
+                        onClick={() =>
+                          setEditFinding({
+                            result: detail,
+                            rate: String(detail.rate),
+                          })
+                        }
+                      >
+                        {t("Edit findings")}
+                      </Button>
+                    )}
+                    {editFinding ? (
+                      <form onSubmit={saveFinding}>
+                        <fieldset disabled={disabled}>
+                          {resultFields(editFinding.result, (value) =>
+                            setEditFinding({ ...editFinding, result: value }),
+                          )}
+                          {rateField(editFinding.rate, (value) =>
+                            setEditFinding({ ...editFinding, rate: value }),
+                          )}
+                          <div className="ws-actions">
+                            <Button>{t("Save changes")}</Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              onClick={() => setEditFinding(undefined)}
+                            >
+                              {t("Cancel")}
+                            </Button>
+                          </div>
+                        </fieldset>
+                      </form>
+                    ) : !draft ? (
+                      <Button onClick={() => setDraft(email(detail))}>
+                        {t("Generate client email")}
+                      </Button>
+                    ) : (
+                      <>
+                        <label>
+                          {t("Email draft")}
+                          <textarea
+                            rows={9}
+                            value={draft}
+                            onChange={(e) => setDraft(e.target.value)}
+                          />
+                        </label>
+                        <Button
+                          onClick={() =>
+                            void perform("Copying…", async () => {
+                              await navigator.clipboard.writeText(draft);
+                              setNotice("Email copied.");
+                            })
+                          }
+                        >
+                          <Clipboard size={16} /> {t("Copy email")}
+                        </Button>
+                      </>
+                    )}
+                  </Panel>
+                ) : (
+                  <Panel title={t("Contract and findings")} icon={<FileText />}>
+                    <p>
+                      {t("Select a review to see its findings and evidence.")}
+                    </p>
+                  </Panel>
+                )}
+              </div>
+              <Panel title={t("Contract chat")} icon={<ScanLine />}>
+                <p>
+                  {t(
+                    "Ask about the selected contract. The local model must cite a clause for supported answers.",
+                  )}
+                </p>
+                {!gpu && (
+                  <p>{t("WebGPU is unavailable. Use manual review.")}</p>
+                )}
+                {turns.length > 0 && (
+                  <ol className="ws-chat" aria-live="polite">
+                    {turns.map((turn, index) => (
+                      <li key={index}>
+                        <b>{turn.question}</b>
+                        <p>
+                          {turn.answer.evidence
+                            ? turn.answer.reasoning
+                            : t(
+                                "No supporting clause was verified for this answer.",
+                              )}
+                        </p>
+                        {turn.answer.evidence && (
+                          <blockquote>{turn.answer.evidence}</blockquote>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+                <form onSubmit={askContract}>
+                  <fieldset disabled={disabled || !gpu}>
+                    <label>
+                      {t("Question about this contract")}
+                      <textarea
+                        required
+                        rows={2}
+                        maxLength={1500}
+                        value={question}
+                        onChange={(e) => setQuestion(e.target.value)}
+                      />
+                    </label>
+                    <div className="ws-actions">
+                      <Button>{t("Ask locally")}</Button>
+                      {turns.length > 0 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() =>
+                            setChats((all) => ({ ...all, [selected]: [] }))
+                          }
+                        >
+                          {t("Clear chat")}
+                        </Button>
+                      )}
+                    </div>
+                  </fieldset>
+                </form>
+              </Panel>
+              <FindingsReport
+                reviews={currentReviews}
+                name={project.name}
+                t={t}
+                language={language}
+                money={money}
+              />
+            </>
+          )}
         </>
       )}
     </main>
