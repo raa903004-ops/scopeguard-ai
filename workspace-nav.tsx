@@ -10,6 +10,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import type { Message, Translate } from "./i18n";
+import { version } from "./package.json";
 
 export const workspaceViews = {
   dashboard: {
@@ -60,9 +61,11 @@ export const isWorkspaceView = (value: string): value is WorkspaceView =>
 export function WorkspaceNavigation({
   page,
   t,
+  model,
 }: {
   page: WorkspaceView;
   t: Translate;
+  model: { state: string; label: string };
 }) {
   const [expanded, setExpanded] = useState(false);
   const CurrentIcon = workspaceViews[page].icon;
@@ -100,6 +103,13 @@ export function WorkspaceNavigation({
             );
           })}
       </nav>
+      <div className="ws-sidebar-footer">
+        <span className="ws-model" data-state={model.state} aria-live="polite">
+          <i aria-hidden="true" />
+          {model.label}
+        </span>
+        <small aria-label={t("App version") + " " + version}>v{version}</small>
+      </div>
     </aside>
   );
 }

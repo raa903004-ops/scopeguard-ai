@@ -417,6 +417,7 @@ const ru = {
     "У этого проекта ещё нет сохранённых результатов.",
   "Start analysis": "Начать анализ",
   "Open project": "Открыть проект",
+  "App version": "Версия приложения",
 };
 
 export type Message = keyof typeof ru;

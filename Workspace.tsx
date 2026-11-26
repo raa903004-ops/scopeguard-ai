@@ -629,12 +629,25 @@ export default function Workspace({
       </label>
     </details>
   );
+  const sampleAction = (
+    <Button
+      type="button"
+      variant="outline"
+      disabled={disabled}
+      onClick={() => void loadSample()}
+    >
+      {t("Load sample contract")}
+    </Button>
+  );
   const missingProject = (
     <Panel title={t("Projects")} icon={<Folder />}>
       <p>{t("Create or select a project to continue.")}</p>
-      <a className="sg-button sg-solid" href="#projects">
-        {t("Projects")}
-      </a>
+      <div className="ws-actions">
+        <a className="sg-button sg-solid" href="#projects">
+          {t("Projects")}
+        </a>
+        {sampleAction}
+      </div>
     </Panel>
   );
   function historyItem(r: Review) {
@@ -787,7 +800,11 @@ export default function Workspace({
   );
   return (
     <div className="ws-shell">
-      <WorkspaceNavigation page={page} t={t} />
+      <WorkspaceNavigation
+        page={page}
+        t={t}
+        model={{ state: modelState, label: t(modelLabels[modelState]) }}
+      />
       <main
         className="ws"
         onInvalidCapture={(event) => {
@@ -820,19 +837,10 @@ export default function Workspace({
             </h1>
             <p>{t(workspaceViews[page].description)}</p>
           </div>
-          <div className="ws-badges">
-            <span className="ws-local">
-              <ShieldCheck size={15} /> {t("On this device")}
-            </span>
-            <span
-              className="ws-model"
-              data-state={modelState}
-              aria-live="polite"
-            >
-              <i aria-hidden="true" />
-              {t(modelLabels[modelState])}
-            </span>
-          </div>
+          <span className="ws-local">
+            <ShieldCheck size={15} />
+            {t("On this device")}
+          </span>
         </div>
         {error && (
           <p className="ws-error" role="alert">
@@ -1068,7 +1076,10 @@ export default function Workspace({
               icon={<Layers />}
             >
               {!projects.length && (
-                <p>{t("Your saved agreements will appear here.")}</p>
+                <>
+                  <p>{t("Your saved agreements will appear here.")}</p>
+                  {sampleAction}
+                </>
               )}
               <label>
                 {t("Search projects")}
@@ -1123,7 +1134,10 @@ export default function Workspace({
               {reviews.length ? (
                 reviews.slice(0, 5).map(historyItem)
               ) : (
-                <p>{t("Start a review to build your history.")}</p>
+                <>
+                  <p>{t("Start a review to build your history.")}</p>
+                  {projects.length > 0 && sampleAction}
+                </>
               )}
             </Panel>
           </>
@@ -1131,6 +1145,14 @@ export default function Workspace({
         {ready && page === "analytics" && (
           <>
             {statistics}
+            {!realReviews.some((r) => extraWork(r) > 0) && (
+              <div className="ws-actions ws-empty-actions">
+                <a className="sg-button sg-solid" href="#analysis">
+                  {t("Start analysis")}
+                </a>
+                {sampleAction}
+              </div>
+            )}
             <div className="ws-grid">
               <Panel title={t("Estimated revenue trend")} icon={<ScanLine />}>
                 <p>
@@ -1163,14 +1185,12 @@ export default function Workspace({
                 <p>
                   {t("Choose or create a project before starting a review.")}
                 </p>
-                <a className="sg-button sg-solid" href="#projects">
-                  {t("Create project")}
-                </a>
-                {!sampleMode && (
-                  <a className="ws-inline-link" href="#demo">
-                    {t("Try the AI demo")}
+                <div className="ws-actions">
+                  <a className="sg-button sg-solid" href="#projects">
+                    {t("Create project")}
                   </a>
-                )}
+                  {!sampleMode && sampleAction}
+                </div>
               </Panel>
             ) : (
               <>
@@ -1511,7 +1531,15 @@ export default function Workspace({
               <Panel title={t("Findings report")} icon={<FileText />}>
                 <p>{t("Choose a project to export its saved findings.")}</p>
                 {!currentReviews.length ? (
-                  <p>{t("No saved findings for this project yet.")}</p>
+                  <>
+                    <p>{t("No saved findings for this project yet.")}</p>
+                    <div className="ws-actions">
+                      <a className="sg-button sg-solid" href="#analysis">
+                        {t("Start analysis")}
+                      </a>
+                      {sampleAction}
+                    </div>
+                  </>
                 ) : (
                   <>
                     <p>
