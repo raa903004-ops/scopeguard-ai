@@ -1,0 +1,1 @@
+Keep all contract processing in the browser. Validate verbatim evidence before saving. Mark synthetic reviews explicitly. Run npm test, npm run lint, npm run typecheck and npm run build after changes.

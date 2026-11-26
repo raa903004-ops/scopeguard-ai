@@ -1,0 +1,232 @@
+.ws {
+  width: min(1140px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 64px 0 100px;
+  color: var(--text);
+}
+.ws-top,
+.ws-actions,
+.ws-local,
+.ws-panel h2,
+.ws-upload {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ws-top {
+  justify-content: space-between;
+  margin-bottom: 30px;
+}
+.ws h1 {
+  font-size: clamp(2.4rem, 5vw, 3.8rem);
+  line-height: 1.05;
+  letter-spacing: -0.055em;
+  font-weight: 600;
+  margin: 12px 0;
+}
+.ws small,
+.ws-local,
+.ws-stats span {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.ws-top small {
+  letter-spacing: 0.14em;
+  font-weight: 650;
+}
+.ws p {
+  color: var(--muted);
+  line-height: 1.55;
+  margin: 10px 0 18px;
+}
+.ws-local {
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  padding: 7px 13px;
+}
+.ws-stats,
+.ws-grid {
+  display: grid;
+  gap: 18px;
+}
+.ws-stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0 0 20px;
+}
+.ws-stats > div,
+.ws-panel {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 16px;
+  padding: 24px;
+}
+.ws-stats strong {
+  font-size: clamp(1.45rem, 4vw, 2.3rem);
+  line-height: 1.3;
+  display: block;
+  letter-spacing: -0.04em;
+}
+.ws-grid {
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  align-items: start;
+}
+.ws-panel {
+  margin-bottom: 16px;
+}
+.ws-panel h2 {
+  font-size: 1.2rem;
+  letter-spacing: -0.025em;
+  font-weight: 600;
+  margin: 0 0 20px;
+}
+.ws-panel h2 svg {
+  width: 20px;
+  color: var(--accent);
+}
+.ws label {
+  display: grid;
+  gap: 7px;
+  font-weight: 550;
+  font-size: 0.88rem;
+  margin: 0 0 15px;
+}
+.ws fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.ws input,
+.ws textarea,
+.ws select {
+  width: 100%;
+  font: inherit;
+  font-weight: 400;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 10px 12px;
+}
+.ws textarea {
+  resize: vertical;
+  min-height: 64px;
+}
+.ws :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.ws label.ws-upload {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding: 18px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.ws-upload input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.ws-upload:focus-within {
+  outline: 2px solid var(--accent);
+}
+.ws pre,
+.ws blockquote {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  padding: 14px;
+  background: var(--bg);
+  border-radius: 8px;
+  max-height: 320px;
+  overflow: auto;
+}
+.ws blockquote {
+  border-left: 3px solid var(--accent);
+  margin: 16px 0;
+}
+.ws details {
+  margin-bottom: 15px;
+}
+.ws summary {
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.ws-actions {
+  flex-wrap: wrap;
+}
+.ws button {
+  cursor: pointer;
+}
+.ws button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.ws hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 24px 0;
+}
+.ws .ws-notice,
+.ws .ws-error {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 12px 16px;
+  border-radius: 10px;
+  overflow-wrap: anywhere;
+}
+.ws .ws-error,
+.ws .ws-danger {
+  color: #cf645b;
+}
+.ws .ws-history {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  text-align: left;
+  padding: 13px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  color: var(--text);
+  background: transparent;
+}
+.ws-history span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+.ws-history:hover b {
+  color: var(--accent);
+}
+@media (max-width: 760px) {
+  .ws {
+    width: calc(100% - 32px);
+    padding-top: 36px;
+  }
+  .ws-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .ws-local {
+    display: none;
+  }
+  .ws-stats {
+    gap: 7px;
+  }
+  .ws-stats > div {
+    padding: 12px;
+  }
+  .ws-panel {
+    padding: 18px;
+  }
+  .ws-stats span {
+    font-size: 0.72rem;
+  }
+}

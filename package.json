@@ -1,0 +1,35 @@
+{
+  "name": "scopeguard-ai",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "node --experimental-strip-types --test engine.test.ts"
+  },
+  "dependencies": {
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "lucide-react": "^0.468.0",
+    "idb": "^8.0.3",
+    "@mlc-ai/web-llm": "^0.2.79",
+    "pdfjs-dist": "^5.4.54",
+    "@fontsource-variable/geist": "^5.2.0",
+    "class-variance-authority": "^0.7.1"
+  },
+  "devDependencies": {
+    "vite": "^7.2.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "^5.9.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "tailwindcss": "^4.1.0",
+    "@tailwindcss/vite": "^4.1.0",
+    "eslint": "^9.0.0",
+    "typescript-eslint": "^8.40.0",
+    "@types/node": "^24.0.0"
+  }
+}
